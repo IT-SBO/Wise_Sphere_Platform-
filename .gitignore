@@ -13,3 +13,9 @@ branding/build/
 __pycache__/
 *.pyc
 node_modules/
+
+# .NET build output
+bin/
+obj/
+*.user
+TestResults/
