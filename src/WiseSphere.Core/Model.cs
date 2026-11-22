@@ -50,4 +50,5 @@ public sealed record PlatformPolicy(
     IReadOnlyDictionary<string, Tenant> Tenants,
     IReadOnlyDictionary<Tier, TierPolicy> Tiers,
     IReadOnlyDictionary<string, BusinessCalendar> Calendars,
-    int AtRiskMinutes);
+    int AtRiskMinutes,
+    IReadOnlyDictionary<string, ContainmentSettings>? Containment = null);

@@ -248,6 +248,51 @@ def portal_checks():
         code = e.code
     check("Portal refuses writes without the anti-CSRF header", code == 400, f"HTTP {code}")
 
+    # ---- RPT-01 monthly report
+    month = time.strftime("%Y-%m")
+    code_r, rep = get(cli, f"/api/reports/monthly?client=CL001&month={month}")
+    code_x, _ = get(cli, f"/api/reports/monthly?client=CL000&month={month}")
+    check("RPT-01 monthly report for own client; other client refused", code_r == 200 and rep["ticketsOpened"] > 0 and code_x == 404,
+          f"own={code_r} opened={rep and rep['ticketsOpened']} other={code_x}")
+
+    # ---- SOC-04 approved containment
+    soc, me_soc = session("soc.engineer", ENV["LAB_USERS_PASSWORD"])
+    stamp = int(time.time())
+    _, alert = post("/webhook/wazuh-alert", {"alert_id": f"{stamp}.7", "rule": {"id": "5712", "level": 10, "description": "sshd: brute force"},
+                                            "agent": {"id": f"8{stamp % 100:02d}", "name": "cl001-dc03", "labels": {"client": "CL001"}}, "srcip": "198.51.100.88"})
+    tid = alert.get("ticket_id")
+
+    def approve(op, ip, hours=4):
+        req = urllib.request.Request(f"{base}/api/tickets/{tid}/containment", method="POST",
+                                     data=json.dumps({"ip": ip, "hours": hours, "reason": "e2e brute force test"}).encode(),
+                                     headers={"Content-Type": "application/json", "X-WS-Portal": "1"})
+        try:
+            with op.open(req, timeout=30) as r:
+                return r.status, json.loads(r.read())
+        except urllib.error.HTTPError as e:
+            return e.code, json.loads(e.read() or b"{}")
+
+    c_noc, _ = approve(noc, "198.51.100.88")
+    c_int, b_int = approve(soc, "10.1.1.5")
+    c_long, _ = approve(soc, "198.51.100.88", hours=48)
+    c_ok, b_ok = approve(soc, "198.51.100.88")
+    with urllib.request.urlopen(f"{SMS}/fw/blocks", timeout=10) as r:
+        fw = json.loads(r.read())
+    check("SOC-04 only the SOC group can approve", me_soc.get("isSoc") and not me_noc.get("isSoc") and c_noc == 403, f"noc={c_noc}")
+    check("SOC-04 internal address and >24 h refused", c_int == 422 and c_long == 422, f"internal={c_int} 48h={c_long}")
+    check("SOC-04 approved block reaches the firewall", c_ok == 200 and any(b["ip"] == "198.51.100.88" for b in fw), f"HTTP {c_ok}")
+    note = sql(f"SELECT COUNT(*) FROM glpi_itilfollowups WHERE itemtype='Ticket' AND items_id={tid} AND content LIKE '%Containment APPROVED by soc.engineer%'")[0][0]
+    check("SOC-04 approval recorded in the GLPI ticket", note == "1", f"followups={note}")
+    if c_ok == 200:
+        req = urllib.request.Request(f"{base}/api/containment/{b_ok['block']['id']}", method="DELETE", headers={"X-WS-Portal": "1"})
+        try:
+            code_d = soc.open(req, timeout=30).status
+        except urllib.error.HTTPError as e:
+            code_d = e.code
+        with urllib.request.urlopen(f"{SMS}/fw/blocks", timeout=10) as r:
+            fw = json.loads(r.read())
+        check("SOC-04 block removed from the firewall on request", code_d == 204 and not any(b["ip"] == "198.51.100.88" for b in fw), f"HTTP {code_d}")
+
 
 def summary() -> int:
     passed = sum(1 for _, ok, _ in RESULTS if ok)

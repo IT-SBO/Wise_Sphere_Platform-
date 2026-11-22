@@ -4,7 +4,7 @@ import { RouterLink } from '@angular/router';
 import { Api } from '../core/api';
 import { Auth } from '../core/auth';
 import { I18n, TranslatePipe } from '../core/i18n';
-import { STATUS, TicketDetail, priorityLabel } from '../core/models';
+import { ActiveBlock, STATUS, TicketDetail, priorityLabel } from '../core/models';
 
 /** Ticket with its history. Ticket text is HTML from GLPI; Angular's [innerHTML] sanitises it. */
 @Component({
@@ -41,6 +41,29 @@ import { STATUS, TicketDetail, priorityLabel } from '../core/models';
           } @empty { <li class="muted">{{ 'dash.none' | t }}</li> }
         </ol>
       </section>
+      @if (canContain()) {
+        <section class="card containment">
+          <h2>{{ 'cont.title' | t }}</h2>
+          <p class="muted small">{{ 'cont.help' | t }}</p>
+          @for (b of blocks(); track b.id) {
+            <div class="block-row">
+              <code>{{ b.ip }}</code>
+              <span>{{ 'cont.until' | t }} {{ i18n.date(b.expiresAt) }} · {{ 'cont.by' | t }} {{ b.approvedBy }} · {{ b.firewallType }}</span>
+              <button class="btn btn-ghost btn-sm" (click)="unblock(b.id)">{{ 'cont.remove' | t }}</button>
+            </div>
+          }
+          <form class="inline-form" (ngSubmit)="block()">
+            <label>{{ 'cont.ip' | t }}<input name="ip" [(ngModel)]="ip" required /></label>
+            <label>{{ 'cont.hours' | t }}
+              <select name="hours" [(ngModel)]="hours">@for (h of [1, 4, 8, 24]; track h) { <option [ngValue]="h">{{ h }} {{ 'cont.h' | t }}</option> }</select>
+            </label>
+            <label class="grow">{{ 'cont.reason' | t }}<input name="reason" [(ngModel)]="reason" required /></label>
+            <button class="btn btn-danger" [disabled]="busy() || !ip.trim() || !reason.trim()">{{ 'cont.approve' | t }}</button>
+          </form>
+          @for (e of blockErrors(); track e) { <p class="alert">{{ e }}</p> }
+          @if (blockedMsg()) { <p class="ok">{{ 'cont.done' | t }}</p> }
+        </section>
+      }
       @if (d.ticket.status < 6) {
         <section class="card">
           <h2>{{ 'ticket.reply' | t }}</h2>
@@ -64,13 +87,51 @@ export class TicketDetailPage implements OnInit {
   busy = signal(false);
   error = signal(false);
   text = '';
+  ip = '';
+  hours = 24;
+  reason = '';
+  blocks = signal<ActiveBlock[]>([]);
+  blockErrors = signal<string[]>([]);
+  blockedMsg = signal(false);
+  canContain = signal(false);
   prio = priorityLabel;
   status = (s: number) => STATUS[s] ?? String(s);
 
   ngOnInit() { this.load(); }
 
   async load() {
-    try { this.d.set(await this.api.ticket(Number(this.id()))); } catch { this.notFound.set(true); }
+    try {
+      const d = await this.api.ticket(Number(this.id()));
+      this.d.set(d);
+      // SOC-04: containment panel only on Wazuh security tickets, for members of the SOC group
+      if (this.auth.me()?.isSoc && d.ticket.title.startsWith('[WZH:')) {
+        const c = await this.api.containment(d.ticket.id);
+        this.canContain.set(c.allowed);
+        this.blocks.set(c.blocks ?? []);
+        if (!this.ip) this.ip = /Source IP:<\/b>\s*([0-9a-fA-F:.]+)/.exec(d.content)?.[1] ?? '';
+      }
+    } catch { this.notFound.set(true); }
+  }
+
+  async block() {
+    if (!confirm(this.i18n.t('cont.confirm'))) return;
+    this.busy.set(true);
+    this.blockErrors.set([]);
+    this.blockedMsg.set(false);
+    try {
+      await this.api.approveBlock(Number(this.id()), this.ip.trim(), this.hours, this.reason.trim());
+      this.blockedMsg.set(true);
+      this.reason = '';
+      await this.load();
+    } catch (e: unknown) {
+      const errs = (e as { error?: { errors?: string[] } })?.error?.errors;
+      this.blockErrors.set(errs?.length ? errs : [this.i18n.t('common.error')]);
+    } finally { this.busy.set(false); }
+  }
+
+  async unblock(id: string) {
+    await this.api.removeBlock(id);
+    await this.load();
   }
 
   async reply() {

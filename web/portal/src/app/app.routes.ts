@@ -12,6 +12,7 @@ export const routes: Routes = [
       { path: 'tickets', loadComponent: () => import('./pages/tickets').then((m) => m.TicketsPage) },
       { path: 'tickets/:id', loadComponent: () => import('./pages/ticket-detail').then((m) => m.TicketDetailPage) },
       { path: 'new', loadComponent: () => import('./pages/new-ticket').then((m) => m.NewTicketPage) },
+      { path: 'reports', loadComponent: () => import('./pages/report').then((m) => m.ReportPage) },
       { path: 'monitoring', loadComponent: () => import('./pages/monitoring').then((m) => m.MonitoringPage) },
     ],
   },

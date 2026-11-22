@@ -49,7 +49,7 @@ public sealed class CsatReviewJob(GlpiClient glpi, GlpiCatalog catalog, StateSto
 
 /// <summary>Runs the scheduled jobs. Failures are reported (INT-07) and retried on the next tick.</summary>
 public sealed class SchedulerWorker(
-    SlaWatchJob sla, CsatReviewJob csat, PlatformPolicy policy, FailureNotifier failures,
+    SlaWatchJob sla, CsatReviewJob csat, ContainmentService containment, PlatformPolicy policy, FailureNotifier failures,
     IOptions<IntegrationOptions> options, ILogger<SchedulerWorker> log) : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -69,6 +69,8 @@ public sealed class SchedulerWorker(
                 try { await sla.RunAsync(stoppingToken); }
                 catch (Exception e) when (e is not OperationCanceledException) { failures.Report("sla-watch", e); }
             }
+            try { await containment.ExpireAsync(stoppingToken); }
+            catch (Exception e) when (e is not OperationCanceledException) { failures.Report("containment-expiry", e); }
             var local = TimeZoneInfo.ConvertTime(DateTimeOffset.UtcNow, tz);
             var today = DateOnly.FromDateTime(local.DateTime);
             if (o.CsatReviewEnabled && csatDoneFor != today && TimeOnly.FromDateTime(local.DateTime) >= csatAt)

@@ -14,6 +14,17 @@ public sealed class PortalOptions
     public int AtRiskMinutes { get; set; } = 60;
 }
 
+public sealed class IntegrationOptions
+{
+    public const string Section = "Integration";
+    /// <summary>Integration service base URL (internal network), e.g. http://ws-integration:8080</summary>
+    public string Url { get; set; } = "";
+    /// <summary>Same shared secret as the webhooks (X-WS-Secret).</summary>
+    public string Secret { get; set; } = "";
+    /// <summary>GLPI group whose members may approve containment (SOC-04).</summary>
+    public string SocGroup { get; set; } = "WS-SOC";
+}
+
 public sealed class ZabbixOptions
 {
     public const string Section = "Zabbix";
@@ -26,7 +37,7 @@ public sealed record EntityInfo(int Id, string Name, string ClientCode);
 
 /// <summary>Server-side portal session. Only its id travels in the cookie; the GLPI token never reaches the browser.</summary>
 public sealed record PortalSession(string Id, string GlpiToken, int UserId, string Login, string DisplayName, bool IsStaff,
-    IReadOnlyList<EntityInfo> Entities, DateTimeOffset ExpiresAt)
+    IReadOnlyList<EntityInfo> Entities, DateTimeOffset ExpiresAt, bool IsSoc = false)
 {
     public IEnumerable<string> ClientCodes => Entities.Select(e => e.ClientCode).Where(c => c.Length > 0).Distinct();
 }

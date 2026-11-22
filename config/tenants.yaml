@@ -29,6 +29,16 @@ tenants:
     tier: gold
     country: KW
     language: ar_SA
+    # SOC-04 approved containment - only with the client's written opt-in (contract, §11.2).
+    # firewall_type: fortigate | generic-http | log-only.  API key: WS__Firewalls__CL001__ApiKey (vault).
+    # Lab: generic-http against the mock firewall. Pilot: fortigate with the client's FortiGate URL.
+    containment:
+      enabled: true
+      firewall_type: generic-http
+      firewall_url: http://sms-mock:8000/fw
+      address_group: WS-Blocklist
+      allow_list: ["203.0.113.0/28"]   # client's critical partners / own public ranges - never blocked
+      max_hours: 24
     sites:
       - code: KWI
         wg_subnet: 10.250.1.0/24

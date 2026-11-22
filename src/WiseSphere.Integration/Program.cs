@@ -21,6 +21,7 @@ builder.Logging.AddJsonConsole(o => { o.IncludeScopes = false; o.TimestampFormat
 builder.Services.Configure<IntegrationOptions>(builder.Configuration.GetSection(IntegrationOptions.Section));
 builder.Services.Configure<GlpiOptions>(builder.Configuration.GetSection(GlpiOptions.Section));
 builder.Services.Configure<SmsOptions>(builder.Configuration.GetSection(SmsOptions.Section));
+builder.Services.Configure<FirewallSecrets>(o => builder.Configuration.GetSection(FirewallSecrets.Section).Bind(o.Clients));
 builder.Services.AddSingleton(sp => PolicyLoader.Load(sp.GetRequiredService<IOptions<IntegrationOptions>>().Value.ConfigDir));
 // Long-lived singletons (GLPI session pool) with connection recycling so DNS changes are picked up
 static HttpClient NewHttp(int timeoutSeconds) =>
@@ -35,6 +36,10 @@ builder.Services.AddSingleton<FailureNotifier>();
 builder.Services.AddSingleton<IntakeService>();
 builder.Services.AddSingleton<SlaWatchJob>();
 builder.Services.AddSingleton<CsatReviewJob>();
+builder.Services.AddSingleton<LogOnlyAdapter>();
+builder.Services.AddSingleton(sp => new GenericHttpAdapter(NewHttp(15)));
+builder.Services.AddSingleton(sp => new FortiGateAdapter(NewHttp(15)));
+builder.Services.AddSingleton<ContainmentService>();
 builder.Services.AddHostedService<SchedulerWorker>();
 
 var app = builder.Build();
@@ -83,6 +88,22 @@ app.MapPost("/jobs/sla-watch/run", async (HttpRequest req, SlaWatchJob job, Canc
     Authorized(req) ? Results.Ok(new { ok = true, sms = await job.RunAsync(ct) }) : Results.StatusCode(403));
 app.MapPost("/jobs/csat-review/run", async (HttpRequest req, CsatReviewJob job, CancellationToken ct) =>
     Authorized(req) ? Results.Ok(new { ok = true, tasks = await job.RunAsync(ct) }) : Results.StatusCode(403));
+
+// SOC-04 approved containment - called by the portal after a SOC engineer approves (same secret, staff network only)
+app.MapPost("/containment/blocks", async (HttpRequest req, ContainmentService c, CancellationToken ct) =>
+{
+    if (!Authorized(req)) return Results.StatusCode(403);
+    var r = await req.ReadFromJsonAsync<BlockRequest>(ct);
+    if (r is null) return Results.BadRequest(new { ok = false, errors = new[] { "invalid JSON" } });
+    var res = await c.BlockAsync(r, ct);
+    return res.Ok ? Results.Ok(res) : Results.UnprocessableEntity(res);
+});
+app.MapGet("/containment/blocks", async (HttpRequest req, ContainmentService c, int? ticket, CancellationToken ct) =>
+    Authorized(req) ? Results.Ok(await c.ListAsync(ticket, ct)) : Results.StatusCode(403));
+app.MapDelete("/containment/blocks/{id}", async (string id, HttpRequest req, ContainmentService c, string? by, CancellationToken ct) =>
+    !Authorized(req) ? Results.StatusCode(403) : await c.UnblockAsync(id, by ?? "SOC", "", ct) ? Results.NoContent() : Results.NotFound());
+app.MapPost("/jobs/containment-expiry/run", async (HttpRequest req, ContainmentService c, CancellationToken ct) =>
+    Authorized(req) ? Results.Ok(new { ok = true, expired = await c.ExpireAsync(ct) }) : Results.StatusCode(403));
 
 app.MapGet("/healthz", () => Results.Ok(new { status = "ok" }));
 app.MapGet("/readyz", async (GlpiClient glpi, CancellationToken ct) =>

@@ -222,6 +222,90 @@ def ensure_lab(z: Zbx, groups: dict) -> dict:
     return {"trapper_host": hid, "agent_host": agent}
 
 
+def ensure_role_templates(z: Zbx, roles: dict) -> dict:
+    """NOC-02: one "WS Role <Name>" template per device role, linking the built-in templates."""
+    gid = ensure_template_group(z, "Templates/WiseSphere")
+    out = {}
+    for key, role in roles.items():
+        linked = z.call("template.get", {"filter": {"host": role["templates"]}, "output": ["templateid", "host"]})
+        missing = set(role["templates"]) - {t["host"] for t in linked}
+        if missing:
+            print(f"warn: role {key}: built-in templates not found: {sorted(missing)}", file=sys.stderr)
+        name = f"WS Role {role['name']}"
+        body = {"groups": [{"groupid": gid}], "templates": [{"templateid": t["templateid"]} for t in linked],
+                "tags": [{"tag": "role", "value": key}], "description": f"WiseSphere device role '{key}' (config/templates.yaml)"}
+        found = z.call("template.get", {"filter": {"host": [name]}, "output": ["templateid"]})
+        try:
+            if found:
+                z.call("template.update", {"templateid": found[0]["templateid"], **body})
+            else:
+                found = [{"templateid": z.call("template.create", {"host": name, **body})["templateids"][0]}]
+        except RuntimeError as e:
+            # two built-in templates define the same item key (e.g. ICMP checks): keep the richer one
+            if "Cannot inherit" not in str(e) or len(linked) < 2:
+                raise
+            body["templates"] = [{"templateid": t["templateid"]} for t in linked if t["host"] != "ICMP Ping"]
+            print(f"warn: role {key}: dropped 'ICMP Ping' ({e})", file=sys.stderr)
+            if found:
+                z.call("template.update", {"templateid": found[0]["templateid"], **body})
+            else:
+                found = [{"templateid": z.call("template.create", {"host": name, **body})["templateids"][0]}]
+        out[key] = found[0]["templateid"]
+    return out
+
+
+def ensure_template_group(z: Zbx, name: str) -> str:
+    g = z.call("templategroup.get", {"filter": {"name": [name]}, "output": ["groupid"]})
+    return g[0]["groupid"] if g else z.call("templategroup.create", {"name": name})["groupids"][0]
+
+
+def ensure_platform_health(z: Zbx, group_id: str, checks: dict[str, str], tenants: dict) -> str:
+    """NFR-OPS-01: the platform monitors itself. HTTP checks of our services, and a P1 per client
+    site when its Zabbix proxy has not been seen for 3 minutes (PRD 5.4). Proxy triggers carry the
+    client tag, so the alert becomes a ticket in that client's queue."""
+    hid = ensure_host(z, "wisesphere-platform", "WiseSphere platform health", group_id, {"service": "wisesphere"})
+    for name, url in checks.items():
+        key = f"ws.http.status[{name}]"
+        item = {"name": f"{name}: HTTP status", "type": 19, "key_": key, "value_type": 3, "delay": "1m", "url": url,
+                "retrieve_mode": 1, "status_codes": "", "timeout": "10s", "follow_redirects": 0,
+                "preprocessing": [{"type": 5, "params": "^HTTP/\\S+ (\\d{3})\n\\1", "error_handler": 2, "error_handler_params": "0"}],
+                "tags": [{"tag": "component", "value": name}]}
+        found = z.call("item.get", {"hostids": hid, "filter": {"key_": key}, "output": ["itemid"]})
+        if found:
+            z.call("item.update", {"itemid": found[0]["itemid"], **{k: v for k, v in item.items() if k not in ("key_", "type")}})
+        else:
+            z.call("item.create", {"hostid": hid, **item})
+        # unreachable service = item unsupported (no value) -> nodata() catches it; wrong status -> value check
+        ensure_trigger(z, hid, f"WiseSphere {name} is down (no HTTP 200 for 3 minutes)",
+                       f"(max(/wisesphere-platform/{key},3m)<>200 and min(/wisesphere-platform/{key},3m)<>200)"
+                       f" or nodata(/wisesphere-platform/{key},3m)=1", 4,
+                       [{"tag": "client", "value": "CL000"}, {"tag": "component", "value": name}])
+
+    existing = {p["name"] for p in z.call("proxy.get", {"output": ["name"]})}
+    for t in tenants["tenants"]:
+        for site in t.get("sites", []):
+            proxy = f"{t['code']}-{site['code']}-PRX01"
+            if proxy not in existing:
+                continue  # registered by scripts/new_spoke.py when the site is onboarded
+            key = f'zabbix[proxy,"{proxy}",lastaccess]'
+            if not z.call("item.get", {"hostids": hid, "filter": {"key_": key}, "output": ["itemid"]}):
+                z.call("item.create", {"hostid": hid, "name": f"Proxy {proxy}: last seen", "type": 5, "key_": key,
+                                       "value_type": 3, "units": "unixtime", "delay": "1m"})
+            ensure_trigger(z, hid, f"Site proxy {proxy} not seen for more than 3 minutes",
+                           f"fuzzytime(/wisesphere-platform/{key},180)=0", 5,
+                           [{"tag": "client", "value": t["code"]}, {"tag": "site", "value": site["code"]}, {"tag": "component", "value": "proxy"}])
+    return hid
+
+
+def ensure_trigger(z: Zbx, hostid: str, desc: str, expr: str, priority: int, tags: list):
+    found = z.call("trigger.get", {"hostids": hostid, "filter": {"description": desc}, "output": ["triggerid"]})
+    body = {"expression": expr, "priority": priority, "tags": tags, "manual_close": 1}
+    if found:
+        z.call("trigger.update", {"triggerid": found[0]["triggerid"], **body})
+    else:
+        z.call("trigger.create", {"description": desc, **body})
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--url", required=True)
@@ -232,6 +316,9 @@ def main() -> int:
     ap.add_argument("--zabbix-public-url", default=os.environ.get("WS_ZABBIX_PUBLIC_URL", "http://localhost:8081"))
     ap.add_argument("--tenants", default=str(ROOT / "config/tenants.yaml"))
     ap.add_argument("--lab", action="store_true", help="also create lab test hosts")
+    ap.add_argument("--templates", default=str(ROOT / "config/templates.yaml"))
+    ap.add_argument("--health-check", action="append", default=[], metavar="NAME=URL",
+                    help="platform HTTP check run by the Zabbix server, e.g. integration=http://ws-integration:8080/readyz (repeatable)")
     ap.add_argument("--readonly-token-out", help="create a read-only API token (portal/Grafana) and write it to this file (mode 600)")
     args = ap.parse_args()
     if not args.password or not args.webhook_secret:
@@ -252,6 +339,9 @@ def main() -> int:
     uid = ensure_notify_user(z, mt, list(groups.values()))
     act = ensure_action(z, mt, uid)
     out = {"groups": groups, "mediatype": mt, "notify_user": uid, "action": act}
+    out["role_templates"] = ensure_role_templates(z, yaml.safe_load(Path(args.templates).read_text())["roles"])
+    checks = dict(c.split("=", 1) for c in args.health_check)
+    out["platform_host"] = ensure_platform_health(z, groups["WiseSphere/Hub"], checks, tenants)
     if args.lab:
         out["lab"] = ensure_lab(z, groups)
     if args.readonly_token_out:

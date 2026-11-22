@@ -2,7 +2,7 @@ import { HttpClient, HttpErrorResponse, HttpInterceptorFn } from '@angular/commo
 import { Injectable, inject } from '@angular/core';
 import { Router } from '@angular/router';
 import { catchError, firstValueFrom, throwError } from 'rxjs';
-import { Dashboard, Me, Problem, TicketDetail, TicketRow } from './models';
+import { ActiveBlock, Dashboard, Me, MonthlyReport, Problem, TicketDetail, TicketRow } from './models';
 
 /** Adds the anti-CSRF header the backend requires on writes, and sends users to /login on 401. */
 export const apiInterceptor: HttpInterceptorFn = (req, next) => {
@@ -31,5 +31,13 @@ export class Api {
   createTicket(entityId: number, title: string, text: string, urgency: number) {
     return firstValueFrom(this.http.post<{ id: number }>('/api/tickets', { entityId, title, text, urgency }));
   }
+  monthlyReport(client: string, month: string) {
+    return firstValueFrom(this.http.get<MonthlyReport>('/api/reports/monthly', { params: { client, month } }));
+  }
+  containment(ticketId: number) { return firstValueFrom(this.http.get<{ allowed: boolean; blocks: ActiveBlock[] | null }>(`/api/tickets/${ticketId}/containment`)); }
+  approveBlock(ticketId: number, ip: string, hours: number, reason: string) {
+    return firstValueFrom(this.http.post<{ ok: boolean; errors: string[]; block: ActiveBlock }>(`/api/tickets/${ticketId}/containment`, { ip, hours, reason }));
+  }
+  removeBlock(id: string) { return firstValueFrom(this.http.delete<void>(`/api/containment/${id}`)); }
   problems() { return firstValueFrom(this.http.get<{ enabled: boolean; problems: Problem[] }>('/api/monitoring/problems')); }
 }

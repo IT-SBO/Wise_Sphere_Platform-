@@ -9,12 +9,13 @@ import { I18n, TranslatePipe } from './core/i18n';
   imports: [RouterOutlet, RouterLink, RouterLinkActive, TranslatePipe],
   template: `
     @if (auth.me(); as me) {
-      <header class="topbar">
+      <header class="topbar no-print">
         <a class="brand" routerLink="/"><span class="logo" aria-hidden="true"></span><span>WiseSphere</span></a>
         <nav>
           <a routerLink="/dashboard" routerLinkActive="active">{{ 'nav.dashboard' | t }}</a>
           <a routerLink="/tickets" routerLinkActive="active">{{ 'nav.tickets' | t }}</a>
           <a routerLink="/monitoring" routerLinkActive="active">{{ 'nav.monitoring' | t }}</a>
+          <a routerLink="/reports" routerLinkActive="active">{{ 'nav.reports' | t }}</a>
           <a routerLink="/new" routerLinkActive="active" class="btn btn-primary btn-sm">{{ 'nav.newTicket' | t }}</a>
         </nav>
         <div class="user">

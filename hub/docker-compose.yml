@@ -140,6 +140,8 @@ services:
       WS__Glpi__AppToken: ${WS_GLPI_APP_TOKEN}
       WS__Glpi__User: svc-integration
       WS__Glpi__Password: ${WS_GLPI_SVC_PASSWORD}
+      # Firewall API keys per opted-in client (SOC-04), from the vault, e.g.:
+      # WS__Firewalls__CL001__ApiKey: ${FW_KEY_CL001}
       WS__Sms__Url: ${SMS_URL}
       WS__Sms__KeyHeader: ${SMS_KEY_HEADER}
       WS__Sms__Key: ${SMS_KEY}
@@ -181,6 +183,8 @@ services:
       WS__Glpi__AppToken: ${WS_GLPI_PORTAL_APP_TOKEN}
       WS__Zabbix__ApiUrl: ${ZABBIX_API_URL}
       WS__Zabbix__ApiToken: ${ZABBIX_PORTAL_TOKEN}
+      WS__Integration__Url: http://ws-integration:8080
+      WS__Integration__Secret: ${WS_WEBHOOK_SECRET}
     networks: [edge, backend]
     labels:
       - traefik.enable=true

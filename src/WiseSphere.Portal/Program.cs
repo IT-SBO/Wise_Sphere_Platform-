@@ -15,11 +15,14 @@ builder.Logging.AddJsonConsole(o => { o.TimestampFormat = "yyyy-MM-ddTHH:mm:ss.f
 builder.Services.Configure<PortalOptions>(builder.Configuration.GetSection(PortalOptions.Section));
 builder.Services.Configure<GlpiOptions>(builder.Configuration.GetSection(GlpiOptions.Section));
 builder.Services.Configure<ZabbixOptions>(builder.Configuration.GetSection(ZabbixOptions.Section));
+builder.Services.Configure<IntegrationOptions>(builder.Configuration.GetSection(IntegrationOptions.Section));
 static HttpClient NewHttp() => new(new SocketsHttpHandler { PooledConnectionLifetime = TimeSpan.FromMinutes(5) }) { Timeout = TimeSpan.FromSeconds(30) };
 builder.Services.AddSingleton(sp => ActivatorUtilities.CreateInstance<GlpiClient>(sp, NewHttp()));
 builder.Services.AddSingleton(sp => ActivatorUtilities.CreateInstance<MonitoringService>(sp, NewHttp()));
 builder.Services.AddSingleton<SessionStore>();
 builder.Services.AddSingleton<TicketService>();
+builder.Services.AddSingleton<ReportService>();
+builder.Services.AddSingleton(sp => ActivatorUtilities.CreateInstance<ContainmentClient>(sp, NewHttp()));
 builder.Services.AddProblemDetails();
 builder.Services.AddRateLimiter(o =>
 {
@@ -107,6 +110,36 @@ secured.MapPost("/tickets", async (NewTicketRequest r, HttpContext ctx, TicketSe
 secured.MapGet("/monitoring/problems", async (HttpContext ctx, MonitoringService m, CancellationToken ct) =>
     Results.Ok(new { enabled = m.Enabled, problems = await m.ProblemsAsync(S(ctx), ct) }));
 
+secured.MapGet("/reports/monthly", async (HttpContext ctx, ReportService r, string client, string month, CancellationToken ct) =>
+{
+    try { return await r.MonthlyAsync(S(ctx), client, month, ct) is { } rep ? Results.Ok(rep) : Results.NotFound(); }
+    catch (ArgumentException e) { return Results.BadRequest(new { error = e.Message }); }
+});
+
+// SOC-04: approved containment on a security ticket - SOC group only
+secured.MapGet("/tickets/{id:int}/containment", async (int id, HttpContext ctx, ContainmentClient c, CancellationToken ct) =>
+{
+    var s = S(ctx);
+    if (!s.IsSoc) return Results.Ok(new { allowed = false, blocks = Array.Empty<object>() });
+    return Results.Ok(new { allowed = c.Enabled, blocks = c.Enabled ? await c.ListAsync(id, ct) : default });
+});
+secured.MapPost("/tickets/{id:int}/containment", async (int id, BlockApproval r, HttpContext ctx, TicketService tickets, ContainmentClient c, CancellationToken ct) =>
+{
+    var s = S(ctx);
+    if (!s.IsSoc) return Results.Json(new { errors = new[] { "only the SOC group can approve containment" } }, statusCode: 403);
+    var t = await tickets.GetAsync(s, id, ct);
+    if (t is null || !t.Ticket.Title.StartsWith("[WZH:", StringComparison.Ordinal))
+        return Results.BadRequest(new { errors = new[] { "containment is only possible on a security (Wazuh) ticket" } });
+    var (status, body) = await c.BlockAsync(new { ticketId = id, clientCode = t.Ticket.Client, ip = r.Ip, hours = r.Hours, approvedBy = s.Login, reason = r.Reason }, ct);
+    return Results.Json(body, statusCode: (int)status);
+});
+secured.MapDelete("/containment/{blockId}", async (string blockId, HttpContext ctx, ContainmentClient c, CancellationToken ct) =>
+{
+    var s = S(ctx);
+    if (!s.IsSoc) return Results.StatusCode(403);
+    return await c.UnblockAsync(blockId, s.Login, ct) ? Results.NoContent() : Results.NotFound();
+});
+
 app.MapGet("/healthz", () => Results.Ok(new { status = "ok" }));
 app.MapFallbackToFile("index.html"); // Angular routes
 
@@ -114,12 +147,13 @@ app.Run();
 
 static object Me(PortalSession s) => new
 {
-    name = s.DisplayName, login = s.Login, isStaff = s.IsStaff,
+    name = s.DisplayName, login = s.Login, isStaff = s.IsStaff, isSoc = s.IsSoc,
     entities = s.Entities.Select(e => new { e.Id, e.Name, clientCode = e.ClientCode }),
 };
 
 internal sealed record LoginRequest(string Username, string Password);
 internal sealed record FollowupRequest(string Text);
+internal sealed record BlockApproval(string Ip, int Hours, string Reason);
 internal sealed record NewTicketRequest(int EntityId, string Title, string Text, int Urgency = 3);
 
 /// <summary>Exposed for integration tests.</summary>

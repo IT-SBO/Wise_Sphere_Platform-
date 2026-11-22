@@ -140,6 +140,7 @@ services:
       WS__Integration__Ids__GroupSoc: ${WS_GLPI_ID_GROUP_SOC:-0}
       WS__Integration__Ids__GroupSdm: ${WS_GLPI_ID_GROUP_SDM:-0}
       WS__Integration__Ids__SolutionType: ${WS_GLPI_ID_SOLUTIONTYPE:-0}
+      WS__Firewalls__CL001__ApiKey: ${FW_KEY}
       WS__Sms__Url: http://sms-mock:8000/send
       WS__Sms__Key: ${SMS_KEY}
       WS__Sms__Numbers__noc: "+96500000001"
@@ -170,6 +171,8 @@ services:
       WS__Glpi__AppToken: ${WS_GLPI_PORTAL_APP_TOKEN:-}
       WS__Zabbix__ApiUrl: http://zabbix-web:8080/api_jsonrpc.php
       WS__Zabbix__ApiToken: ${ZABBIX_PORTAL_TOKEN:-}
+      WS__Integration__Url: http://ws-integration:8080
+      WS__Integration__Secret: ${WS_WEBHOOK_SECRET}
     ports: ["${PORTAL_PORT}:8080"]
     networks: [lab]
 
@@ -180,6 +183,7 @@ services:
     command: ["python", "/app/server.py"]
     environment:
       SMS_KEY: ${SMS_KEY}
+      FW_KEY: ${FW_KEY}
     volumes: ["./mock-sms:/app:ro"]
     ports: ["${SMS_PORT}:8000"]
     networks: [lab]

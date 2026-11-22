@@ -51,6 +51,34 @@ public sealed class MonitoringService(HttpClient http, IOptions<ZabbixOptions> o
         .ToList();
     }
 
+    /// <summary>Problems raised for a client's host groups in [from, to) and their total duration in hours (clipped to the period).</summary>
+    public async Task<(int Count, double Hours)> ProblemTotalsAsync(string client, DateTimeOffset from, DateTimeOffset to, CancellationToken ct)
+    {
+        if (!Enabled) return (0, 0);
+        var groups = await CallAsync("hostgroup.get", new { output = new[] { "groupid" }, search = new { name = new[] { client + "/" } }, startSearch = true }, ct);
+        var groupIds = groups.EnumerateArray().Select(g => g.GetProperty("groupid").GetString()).ToArray();
+        if (groupIds.Length == 0) return (0, 0);
+        var events = await CallAsync("event.get", new
+        {
+            output = new[] { "eventid", "clock", "r_eventid" }, groupids = groupIds, source = 0, @object = 0, value = 1,
+            time_from = from.ToUnixTimeSeconds(), time_till = to.ToUnixTimeSeconds() - 1,
+        }, ct);
+        var list = events.EnumerateArray().ToList();
+        var recoveryIds = list.Select(e => e.GetProperty("r_eventid").GetString()).Where(r => r is not null and not "0").ToArray();
+        var recoveries = recoveryIds.Length == 0 ? new Dictionary<string, long>() :
+            (await CallAsync("event.get", new { output = new[] { "eventid", "clock" }, eventids = recoveryIds }, ct)).EnumerateArray()
+            .ToDictionary(e => e.GetProperty("eventid").GetString()!, e => long.Parse(e.GetProperty("clock").GetString()!));
+        var end = Math.Min(to.ToUnixTimeSeconds(), DateTimeOffset.UtcNow.ToUnixTimeSeconds());
+        double seconds = 0;
+        foreach (var e in list)
+        {
+            var start = long.Parse(e.GetProperty("clock").GetString()!);
+            var stop = recoveries.TryGetValue(e.GetProperty("r_eventid").GetString() ?? "", out var r) ? Math.Min(r, end) : end;
+            seconds += Math.Max(0, stop - start);
+        }
+        return (list.Count, seconds / 3600);
+    }
+
     private async Task<JsonElement> CallAsync(string method, object @params, CancellationToken ct)
     {
         var body = JsonSerializer.Serialize(new { jsonrpc = "2.0", method, @params, id = Interlocked.Increment(ref _id) });

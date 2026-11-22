@@ -21,6 +21,7 @@ grep -q '^WS_GLPI_APP_TOKEN=' .env || echo "WS_GLPI_APP_TOKEN=$(rnd 40)" >> .env
 grep -q '^WS_GLPI_SVC_PASSWORD=' .env || echo "WS_GLPI_SVC_PASSWORD=Ws-$(rnd 24)-9" >> .env
 grep -q '^WS_GLPI_PORTAL_APP_TOKEN=' .env || echo "WS_GLPI_PORTAL_APP_TOKEN=$(rnd 40)" >> .env
 grep -q '^PORTAL_PORT=' .env || echo "PORTAL_PORT=8089" >> .env
+grep -q '^FW_KEY=' .env || echo "FW_KEY=$(rnd 32)" >> .env
 grep -q '^LAB_USERS_PASSWORD=' .env || echo "LAB_USERS_PASSWORD=Lab-$(rnd 16)-7" >> .env
 set -a; source .env; set +a
 
@@ -52,12 +53,13 @@ echo "== Zabbix: provisioning"
 wait_for 300 "Zabbix web" curl -sf -o /dev/null "http://localhost:${ZABBIX_PORT}/"
 python3 "$ROOT/zabbix/provision_zabbix.py" --url "$ZBX_URL" --user Admin --password "${ZABBIX_ADMIN_PASSWORD:-zabbix}" \
   --webhook-url http://ws-integration:8080/webhook/zbx-event --webhook-secret "$WS_WEBHOOK_SECRET" \
-  --zabbix-public-url "http://localhost:${ZABBIX_PORT}" --lab --readonly-token-out .zabbix-portal-token >/dev/null
+  --zabbix-public-url "http://localhost:${ZABBIX_PORT}" --lab --readonly-token-out .zabbix-portal-token \
+  --health-check integration=http://ws-integration:8080/readyz --health-check portal=http://ws-portal:8080/healthz --health-check glpi=http://glpi/ >/dev/null
 sed -i '/^ZABBIX_PORTAL_TOKEN=/d' .env && echo "ZABBIX_PORTAL_TOKEN=$(cat .zabbix-portal-token)" >> .env && rm -f .zabbix-portal-token
 
 echo "== integration service (C# .NET): restart with the GLPI service account and ids"
 python3 "$ROOT/scripts/glpi_ids_env.py" glpi-ids.json .env >/dev/null
-docker compose up -d --force-recreate ws-integration >/dev/null
+docker compose up -d --force-recreate ws-integration sms-mock >/dev/null
 wait_for 120 "integration service" curl -sf "http://localhost:${INTEGRATION_PORT}/readyz"
 
 echo "== portal (Angular + ASP.NET Core)"

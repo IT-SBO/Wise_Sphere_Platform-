@@ -8,7 +8,7 @@ namespace WiseSphere.Portal.Services;
 
 /// <summary>Logs users in against GLPI and keeps their GLPI session server-side.
 /// Staff = users with access to the root entity (WISE NOC/SOC); client users only have their own client entity.</summary>
-public sealed class SessionStore(GlpiClient glpi, IOptions<PortalOptions> options, ILogger<SessionStore> log)
+public sealed class SessionStore(GlpiClient glpi, IOptions<PortalOptions> options, IOptions<IntegrationOptions> integration, ILogger<SessionStore> log)
 {
     private readonly ConcurrentDictionary<string, PortalSession> _sessions = new(StringComparer.Ordinal);
 
@@ -33,10 +33,19 @@ public sealed class SessionStore(GlpiClient glpi, IOptions<PortalOptions> option
                 entities.Add(new(e.GetProperty("id").GetInt32(), name, ClientCode(name)));
             }
 
+        // SOC approvers: members of the WS-SOC group (SOC-04)
+        var isSoc = false;
+        if (entities.Any(e => e.Id == 0) && s.TryGetProperty("glpigroups", out var groups) && groups.ValueKind == JsonValueKind.Array && groups.GetArrayLength() > 0)
+        {
+            var soc = await glpi.UserRequestAsync(token, HttpMethod.Get, "/Group" + GlpiClient.Query(("searchText[name]", $"^{integration.Value.SocGroup}$"), ("range", "0-1")), null, ct);
+            var socId = soc is { ValueKind: JsonValueKind.Array } arr && arr.GetArrayLength() > 0 ? arr[0].GetProperty("id").GetInt32() : -1;
+            isSoc = groups.EnumerateArray().Any(g => (g.ValueKind == JsonValueKind.Number ? g.GetInt32() : int.TryParse(g.GetString(), out var x) ? x : -2) == socId);
+        }
+
         var session = new PortalSession(
             Convert.ToHexString(RandomNumberGenerator.GetBytes(32)), token, userId, login,
             display.Length > 0 ? display : login, entities.Any(e => e.Id == 0), entities,
-            DateTimeOffset.UtcNow.AddHours(options.Value.SessionHours));
+            DateTimeOffset.UtcNow.AddHours(options.Value.SessionHours), isSoc);
         _sessions[session.Id] = session;
         log.LogInformation("Portal login {Login} staff={Staff} clients={Clients}", login, session.IsStaff, string.Join(",", session.ClientCodes));
         return session;

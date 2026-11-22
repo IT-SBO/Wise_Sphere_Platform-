@@ -220,8 +220,8 @@ def ensure_api_client(g: Glpi, args, name: str, token: str) -> dict:
 
 
 def ensure_lab_users(g: Glpi, password: str, entities: dict) -> dict:
-    """LAB ONLY: a NOC operator (Technician on all clients) and a client user (Observer on CL001 only) for TC-10."""
-    def user(name: str, realname: str, profile: str, entity: int, recursive: int) -> int:
+    """LAB ONLY: NOC operator and SOC engineer (Technician on all clients) and a client user (Observer on CL001 only) for TC-10."""
+    def user(name: str, realname: str, profile: str, entity: int, recursive: int, group: str | None = None) -> int:
         found = g.find("User", name=name)
         uid = int(found[0]["id"]) if found else int(g.call("POST", "/User", {"input": {
             "name": name, "realname": realname, "is_active": 1, "password": password, "password2": password}})["id"])
@@ -230,9 +230,15 @@ def ensure_lab_users(g: Glpi, password: str, entities: dict) -> dict:
         if not any(int(l["profiles_id"]) == pid and int(l["entities_id"]) == entity for l in links):
             g.call("POST", "/Profile_User", {"input": {"users_id": uid, "profiles_id": pid, "entities_id": entity, "is_recursive": recursive}})
         g.call("PUT", f"/User/{uid}", {"input": {"profiles_id": pid, "entities_id": entity}})
+        if group:
+            gid = int(g.find("Group", name=group)[0]["id"])
+            members = g.call("GET", f"/User/{uid}/Group_User", params={"range": "0-50"}) or []
+            if not any(int(m["groups_id"]) == gid for m in members):
+                g.call("POST", "/Group_User", {"input": {"users_id": uid, "groups_id": gid}})
         return uid
     return {
-        "noc.operator": user("noc.operator", "NOC Operator", "Technician", 0, 1),
+        "noc.operator": user("noc.operator", "NOC Operator", "Technician", 0, 1, "WS-NOC"),
+        "soc.engineer": user("soc.engineer", "SOC Engineer", "Technician", 0, 1, "WS-SOC"),
         "client.cl001": user("client.cl001", "Pilot Client IT", "Observer", entities["CL001"], 0),
     }
 

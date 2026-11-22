@@ -15,12 +15,12 @@ Release-1 platform: multi-client, deduplicated, storm-safe, SLA-aware, secured, 
 
 | Folder | Contents |
 |---|---|
-| `config/` | `tenants.yaml` (client codes CLnnn, tier, country, sites) and `sla.yaml` (SLA matrix per package) – the single source of truth |
+| `config/` | `tenants.yaml` (clients, tier, sites, containment opt-in), `sla.yaml` (SLA matrix), `templates.yaml` (device roles) – the single source of truth |
 | `src/` | C# / .NET 10: `WiseSphere.Core` (event contracts + decision rules), `WiseSphere.Glpi` (GLPI API client), `WiseSphere.Integration` (webhooks, SLA watch, CSAT review, SMS), `WiseSphere.Portal` (portal back end) |
 | `web/portal/` | Angular 22 portal front end (English / Arabic, brand tokens) |
 | `tests/` | xUnit tests (`WiseSphere.Core.Tests`), Python tooling tests, end-to-end lab suite, TC-09 load test |
 | `glpi/` | `provision_glpi.py` – entities, SLAs, calendars, rules, survey, groups, service account, API client |
-| `zabbix/` | `provision_zabbix.py` – media type, action, host groups, notify user; webhook script |
+| `zabbix/` | `provision_zabbix.py` – media type, action, host groups, device-role templates, platform self-monitoring; `add_hosts.py` – register client devices |
 | `wazuh/` | Integration script and config for the security layer (Phase 4) |
 | `grafana/` | Datasources + NOC Global Overview dashboard (DSH-01/02/03, CSAT, PRD goals) |
 | `hub/` | Production hub stack (Traefik, GLPI, integration service, Grafana, Zabbix) with the Technical Kit fixes |
@@ -32,6 +32,8 @@ Release-1 platform: multi-client, deduplicated, storm-safe, SLA-aware, secured, 
 | `poc/` | The original PoC (compose, workflow, PDFs, screenshots) and [what the platform changes](poc/README.md) |
 
 ## Try it: the lab (about 5 minutes)
+
+> **On Windows?** Follow [docs/RUN_ON_WINDOWS.md](docs/RUN_ON_WINDOWS.md) (Docker Desktop + WSL 2).
 
 Needs Docker with Compose, Python 3.11+, ~6 GB RAM. The .NET SDK is optional (`scripts/dotnet.sh` runs it in a container).
 
@@ -72,6 +74,8 @@ make lab-test
 | TC-07 Wazuh level 10 → SOC ticket, level 12 → SMS, repeat deduped | ✅ |
 | Wrong webhook secret → 403, bad payload → 400 | ✅ |
 | TC-10 portal: client sees only its own tickets, CSRF and login checks | ✅ |
+| TC-08 SOC-approved firewall block with expiry; non-SOC / internal IP / > 24 h refused | ✅ (mock firewall) |
+| RPT-01 monthly report; other client refused | ✅ |
 | TC-09 500 alerts (`make lab-load-test`) | ✅ 20 s, none lost, p95 0.49 s (target: 10 min, p95 ≤ 60 s) |
 
 The PoC test also runs on the platform: `make lab-poc-test` stops the agent container (ticket after ~5 min, priority from Zabbix severity, client SLA) and starts it again (ticket solved automatically in ~1 min).
