@@ -1,0 +1,41 @@
+# Traefik file provider (T-05). Go templates read the container environment.
+tls:
+  options:
+    modern:
+      minVersion: VersionTLS12
+      sniStrict: true
+      cipherSuites:
+        - TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384
+        - TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384
+        - TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305
+        - TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305
+        - TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256
+        - TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256
+
+http:
+  middlewares:
+    # Staff VPN only (NFR-SEC-02). STAFF_CIDRS must NOT contain the client tunnel range 10.250.0.0/16 (T-03).
+    staff-only:
+      ipAllowList:
+        sourceRange:
+{{- range $c := splitList "," (env "STAFF_CIDRS") }}
+          - "{{ trim $c }}"
+{{- end }}
+
+    # Integration webhooks: only the Zabbix server and the Wazuh manager (T-04)
+    webhook-sources:
+      ipAllowList:
+        sourceRange:
+{{- range $c := splitList "," (env "WEBHOOK_SOURCE_CIDRS") }}
+          - "{{ trim $c }}"
+{{- end }}
+
+    secure-headers:
+      headers:
+        stsSeconds: 31536000
+        stsIncludeSubdomains: true
+        contentTypeNosniff: true
+        frameDeny: false          # GLPI uses same-origin frames
+        customFrameOptionsValue: SAMEORIGIN
+        referrerPolicy: strict-origin-when-cross-origin
+        browserXssFilter: true

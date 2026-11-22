@@ -1,0 +1,50 @@
+# Standard monitoring per device role (NOC-02). Each role becomes a Zabbix template
+# "WS Role <Name>" that links the built-in Zabbix 8.0 templates below and adds the role tag.
+# Onboarding (SOP-01) assigns one role per device: zabbix/add_hosts.py --role switch ...
+# Vendor-specific templates can be added per device on top of the role (e.g. "Cisco IOS by SNMP").
+
+roles:
+  switch:
+    name: Switch
+    interface: snmp
+    templates: ["Network Generic Device by SNMP"]   # includes ICMP checks
+  router:
+    name: Router
+    interface: snmp
+    templates: ["Network Generic Device by SNMP"]   # includes ICMP checks
+  firewall-fortigate:
+    name: Firewall FortiGate
+    interface: snmp
+    templates: ["FortiGate by SNMP"]   # includes ICMP checks
+  firewall-generic:
+    name: Firewall
+    interface: snmp
+    templates: ["Network Generic Device by SNMP"]   # includes ICMP checks
+  server-linux:
+    name: Server Linux
+    interface: agent
+    templates: ["ICMP Ping", "Linux by Zabbix agent active"]
+  server-windows:
+    name: Server Windows
+    interface: agent
+    templates: ["ICMP Ping", "Windows by Zabbix agent active"]
+  ups-apc:
+    name: UPS APC
+    interface: snmp
+    templates: ["APC UPS by SNMP"]   # includes ICMP checks
+  printer:
+    name: Printer
+    interface: snmp
+    templates: ["Network Generic Device by SNMP"]   # includes ICMP checks
+  ping-only:
+    name: Ping only
+    interface: none
+    templates: ["ICMP Ping"]
+
+# Vendor templates offered on top of a role (zabbix/add_hosts.py --extra-template ...)
+vendor_templates:
+  - "Cisco IOS by SNMP"
+  - "MikroTik CCR1036-8G-2SEM by SNMP"
+  - "HPE ProLiant DL380 by SNMP"
+  - "Palo Alto PA-440 by HTTP"
+  - "Website certificate by Zabbix agent 2"

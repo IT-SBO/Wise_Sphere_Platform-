@@ -1,0 +1,133 @@
+name: wisesphere-poc
+
+# WiseSphere PoC: GLPI + Zabbix + n8n
+#
+# Start:   docker compose up -d
+# Stop:    docker compose stop
+#
+# GLPI    http://localhost:8090
+# Zabbix  http://localhost:8081
+# n8n     http://localhost:5678
+
+services:
+
+  # GLPI (ticketing and assets)
+
+  glpi-db:
+    image: mariadb:10.11
+    container_name: glpi-db
+    restart: unless-stopped
+    environment:
+      MARIADB_ROOT_PASSWORD: rootpass
+      MARIADB_DATABASE: glpi
+      MARIADB_USER: glpi
+      MARIADB_PASSWORD: glpipass
+    volumes:
+      - glpi_db:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  glpi:
+    # Pinned to GLPI 10. The latest tag is GLPI 11, which uses a different API path.
+    image: glpi/glpi:10.0.18
+    container_name: glpi
+    restart: unless-stopped
+    depends_on:
+      glpi-db:
+        condition: service_healthy
+    environment:
+      GLPI_DB_HOST: glpi-db
+      GLPI_DB_PORT: 3306
+      GLPI_DB_NAME: glpi
+      GLPI_DB_USER: glpi
+      GLPI_DB_PASSWORD: glpipass
+      TIMEZONE: Africa/Cairo
+    volumes:
+      - glpi_data:/var/glpi
+    ports:
+      - "8090:80"   # 8080 was already taken on my machine
+
+  # Zabbix (monitoring)
+
+  zabbix-db:
+    image: mysql:8.0
+    container_name: zabbix-db
+    restart: unless-stopped
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_bin
+      - --default-authentication-plugin=mysql_native_password
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpass
+      MYSQL_DATABASE: zabbix
+      MYSQL_USER: zabbix
+      MYSQL_PASSWORD: zabbixpass
+    volumes:
+      - zabbix_db:/var/lib/mysql
+
+  zabbix-server:
+    image: zabbix/zabbix-server-mysql:alpine-7.0-latest
+    container_name: zabbix-server
+    restart: unless-stopped
+    init: true
+    depends_on:
+      - zabbix-db
+    environment:
+      DB_SERVER_HOST: zabbix-db
+      MYSQL_DATABASE: zabbix
+      MYSQL_USER: zabbix
+      MYSQL_PASSWORD: zabbixpass
+      MYSQL_ROOT_PASSWORD: rootpass
+    ports:
+      - "10051:10051"
+
+  zabbix-web:
+    image: zabbix/zabbix-web-nginx-mysql:alpine-7.0-latest
+    container_name: zabbix-web
+    restart: unless-stopped
+    depends_on:
+      - zabbix-server
+    environment:
+      ZBX_SERVER_HOST: zabbix-server
+      DB_SERVER_HOST: zabbix-db
+      MYSQL_DATABASE: zabbix
+      MYSQL_USER: zabbix
+      MYSQL_PASSWORD: zabbixpass
+      PHP_TZ: Africa/Cairo
+    ports:
+      - "8081:8080"
+
+  # The monitored device for the demo. Stopping this container simulates an outage.
+  zabbix-agent:
+    image: zabbix/zabbix-agent:alpine-7.0-latest
+    container_name: zabbix-agent
+    restart: unless-stopped
+    init: true
+    environment:
+      ZBX_HOSTNAME: "Zabbix server"
+      ZBX_SERVER_HOST: zabbix-server
+
+  # n8n (automation)
+
+  n8n:
+    image: n8nio/n8n:latest
+    container_name: n8n
+    restart: unless-stopped
+    environment:
+      GENERIC_TIMEZONE: Africa/Cairo
+      TZ: Africa/Cairo
+      N8N_SECURE_COOKIE: "false"
+      N8N_RUNNERS_ENABLED: "true"
+    volumes:
+      - n8n_data:/home/node/.n8n
+    ports:
+      - "5678:5678"
+
+volumes:
+  glpi_db:
+  glpi_data:
+  zabbix_db:
+  n8n_data:

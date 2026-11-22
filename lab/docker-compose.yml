@@ -1,0 +1,210 @@
+# WiseSphere LAB - the whole hub core on one machine, with simulated devices.
+# Not for production: no TLS, no WireGuard, default lab passwords from lab/.env.
+# Production stack: hub/docker-compose.yml
+#
+#   make lab-up        # start
+#   make lab-bootstrap # install GLPI API client, provision GLPI + Zabbix, start the integration service
+#   make lab-test      # end-to-end tests TC-01..TC-04
+name: wisesphere-lab
+
+x-restart: &restart
+  restart: unless-stopped
+
+networks:
+  lab:
+    ipam:
+      config:
+        - subnet: 172.30.0.0/24
+
+volumes:
+  glpi-db: {}
+  glpi-data: {}
+  zabbix-db: {}
+  integration-data: {}
+  grafana-data: {}
+
+services:
+  # ------------------------------------------------------------ GLPI 11
+  glpi-db:
+    <<: *restart
+    image: mariadb:${MARIADB_TAG}
+    container_name: ws-glpi-db
+    environment:
+      MARIADB_ROOT_PASSWORD: ${GLPI_DB_ROOT_PASSWORD}
+      MARIADB_DATABASE: glpi
+      MARIADB_USER: glpi
+      MARIADB_PASSWORD: ${GLPI_DB_PASSWORD}
+      TZ: ${TZ}
+    command: ["--character-set-server=utf8mb4", "--collation-server=utf8mb4_unicode_ci"]
+    volumes: [glpi-db:/var/lib/mysql]
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      retries: 30
+    networks: [lab]
+
+  glpi:
+    <<: *restart
+    image: glpi/glpi:${GLPI_TAG}
+    container_name: ws-glpi
+    depends_on:
+      glpi-db: { condition: service_healthy }
+    environment:
+      GLPI_DB_HOST: glpi-db
+      GLPI_DB_PORT: 3306
+      GLPI_DB_NAME: glpi
+      GLPI_DB_USER: glpi
+      GLPI_DB_PASSWORD: ${GLPI_DB_PASSWORD}
+      TZ: ${TZ}
+    volumes: [glpi-data:/var/glpi]
+    ports: ["${GLPI_PORT}:80"]
+    networks: [lab]
+
+  # ------------------------------------------------------------ Zabbix 8.0 LTS
+  zabbix-db:
+    <<: *restart
+    image: postgres:${POSTGRES_TAG}
+    container_name: ws-zabbix-db
+    environment:
+      POSTGRES_DB: zabbix
+      POSTGRES_USER: zabbix
+      POSTGRES_PASSWORD: ${ZABBIX_DB_PASSWORD}
+    volumes: [zabbix-db:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U zabbix -d zabbix"]
+      interval: 10s
+      retries: 30
+    networks: [lab]
+
+  zabbix-server:
+    <<: *restart
+    image: zabbix/zabbix-server-pgsql:${ZABBIX_TAG}
+    container_name: ws-zabbix-server
+    depends_on:
+      zabbix-db: { condition: service_healthy }
+    environment:
+      DB_SERVER_HOST: zabbix-db
+      POSTGRES_DB: zabbix
+      POSTGRES_USER: zabbix
+      POSTGRES_PASSWORD: ${ZABBIX_DB_PASSWORD}
+      ZBX_STARTPINGERS: 2
+      ZBX_UNAVAILABLEDELAY: 30
+    networks: [lab]
+
+  zabbix-web:
+    <<: *restart
+    image: zabbix/zabbix-web-nginx-pgsql:${ZABBIX_TAG}
+    container_name: ws-zabbix-web
+    depends_on: [zabbix-server]
+    environment:
+      DB_SERVER_HOST: zabbix-db
+      POSTGRES_DB: zabbix
+      POSTGRES_USER: zabbix
+      POSTGRES_PASSWORD: ${ZABBIX_DB_PASSWORD}
+      ZBX_SERVER_HOST: zabbix-server
+      PHP_TZ: ${TZ}
+    ports: ["${ZABBIX_PORT}:8080"]
+    networks: [lab]
+
+  # Simulated client device (CL001 / KWI). Stop it to simulate an outage (PoC test).
+  lab-device-01:
+    <<: *restart
+    image: zabbix/zabbix-agent2:${ZABBIX_TAG}
+    container_name: ws-lab-device-01
+    hostname: cl001-kwi-srv01
+    environment:
+      ZBX_HOSTNAME: cl001-kwi-srv01
+      ZBX_SERVER_HOST: zabbix-server
+    networks: [lab]
+
+  # ------------------------------------------------------------ WiseSphere integration service (C# .NET 10)
+  ws-integration:
+    <<: *restart
+    build:
+      context: ..
+      dockerfile: src/WiseSphere.Integration/Dockerfile
+    image: wisesphere/integration:dev
+    container_name: ws-integration
+    depends_on: [glpi]
+    environment:
+      TZ: ${TZ}
+      WS__Integration__WebhookSecret: ${WS_WEBHOOK_SECRET}
+      WS__Glpi__ApiUrl: http://glpi/apirest.php
+      WS__Glpi__AppToken: ${WS_GLPI_APP_TOKEN:-}
+      WS__Glpi__User: svc-integration
+      WS__Glpi__Password: ${WS_GLPI_SVC_PASSWORD:-}
+      # GLPI ids from glpi/provision_glpi.py (appended to lab/.env by the bootstrap)
+      WS__Integration__Ids__RequestTypeMonitoring: ${WS_GLPI_ID_REQTYPE_MONITORING:-0}
+      WS__Integration__Ids__RequestTypeSecurity: ${WS_GLPI_ID_REQTYPE_SECURITY:-0}
+      WS__Integration__Ids__GroupNoc: ${WS_GLPI_ID_GROUP_NOC:-0}
+      WS__Integration__Ids__GroupSoc: ${WS_GLPI_ID_GROUP_SOC:-0}
+      WS__Integration__Ids__GroupSdm: ${WS_GLPI_ID_GROUP_SDM:-0}
+      WS__Integration__Ids__SolutionType: ${WS_GLPI_ID_SOLUTIONTYPE:-0}
+      WS__Firewalls__CL001__ApiKey: ${FW_KEY}
+      WS__Sms__Url: http://sms-mock:8000/send
+      WS__Sms__Key: ${SMS_KEY}
+      WS__Sms__Numbers__noc: "+96500000001"
+      WS__Sms__Numbers__soc: "+96500000002"
+      WS__Sms__Numbers__desk: "+96500000003"
+      WS__Sms__Numbers__integration: "+96500000004"
+    volumes:
+      - ../config:/config:ro
+      - integration-data:/data
+    ports: ["${INTEGRATION_PORT}:8080"]
+    networks: [lab]
+
+  # ------------------------------------------------------------ WiseSphere portal (Angular + ASP.NET Core)
+  ws-portal:
+    <<: *restart
+    build:
+      context: ..
+      dockerfile: src/WiseSphere.Portal/Dockerfile
+    image: wisesphere/portal:dev
+    container_name: ws-portal
+    depends_on: [glpi]
+    environment:
+      TZ: ${TZ}
+      WS__Portal__GlpiTimeZone: ${TZ}
+      WS__Portal__GlpiPublicUrl: http://localhost:${GLPI_PORT}
+      WS__Portal__SecureCookies: "false"          # lab runs on plain http
+      WS__Glpi__ApiUrl: http://glpi/apirest.php
+      WS__Glpi__AppToken: ${WS_GLPI_PORTAL_APP_TOKEN:-}
+      WS__Zabbix__ApiUrl: http://zabbix-web:8080/api_jsonrpc.php
+      WS__Zabbix__ApiToken: ${ZABBIX_PORTAL_TOKEN:-}
+      WS__Integration__Url: http://ws-integration:8080
+      WS__Integration__Secret: ${WS_WEBHOOK_SECRET}
+    ports: ["${PORTAL_PORT}:8080"]
+    networks: [lab]
+
+  sms-mock:
+    <<: *restart
+    image: python:3.13-alpine
+    container_name: ws-sms-mock
+    command: ["python", "/app/server.py"]
+    environment:
+      SMS_KEY: ${SMS_KEY}
+      FW_KEY: ${FW_KEY}
+    volumes: ["./mock-sms:/app:ro"]
+    ports: ["${SMS_PORT}:8000"]
+    networks: [lab]
+
+  # ------------------------------------------------------------ Grafana 13 OSS
+  grafana:
+    <<: *restart
+    image: grafana/grafana:${GRAFANA_TAG}
+    container_name: ws-grafana
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD}
+      GF_PLUGINS_PREINSTALL: ${GRAFANA_PLUGINS}
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      WS_ZABBIX_API_URL: http://zabbix-web:8080/api_jsonrpc.php
+      WS_ZABBIX_API_TOKEN: ${ZABBIX_GRAFANA_TOKEN:-}
+      WS_GLPI_DB_HOST: glpi-db:3306
+      WS_GLPI_DB_RO_PASSWORD: ${GLPI_DB_RO_PASSWORD}
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ../grafana/provisioning:/etc/grafana/provisioning:ro
+      - ../grafana/dashboards:/var/lib/grafana/dashboards:ro
+    ports: ["${GRAFANA_PORT}:3000"]
+    networks: [lab]
+    profiles: [grafana]

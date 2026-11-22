@@ -1,0 +1,7 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Typed client for the GLPI 11 REST API -->
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <ProjectReference Include="..\WiseSphere.Core\WiseSphere.Core.csproj" />
+  </ItemGroup>
+</Project>

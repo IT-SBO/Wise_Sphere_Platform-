@@ -1,0 +1,11 @@
+**/bin/
+**/obj/
+**/node_modules/
+web/portal/dist/
+web/portal/.angular/
+lab/
+hub/.env
+bundles/
+.git/
+poc/
+docs/

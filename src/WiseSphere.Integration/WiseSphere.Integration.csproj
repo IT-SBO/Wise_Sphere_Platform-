@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <!-- Integration service: Zabbix/Wazuh webhooks -> GLPI, SLA watch, CSAT review, SMS paging (replaces n8n) -->
+  <PropertyGroup>
+    <UserSecretsId>wisesphere-integration</UserSecretsId>
+    <!-- CA1001: locks live for the app lifetime in singletons; CA1861: tiny error arrays in endpoints -->
+    <NoWarn>$(NoWarn);CA1001;CA1861</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="YamlDotNet" Version="17.1.0" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\WiseSphere.Core\WiseSphere.Core.csproj" />
+    <ProjectReference Include="..\WiseSphere.Glpi\WiseSphere.Glpi.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="WiseSphere.Integration.Tests" />
+  </ItemGroup>
+</Project>

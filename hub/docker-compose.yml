@@ -1,0 +1,291 @@
+# WiseSphere central HUB - Release 1 (PRD §5.1, §5.2)
+#
+# Profiles map to the Release-1 servers:
+#   app     -> HUB-APP-01  Traefik, GLPI + MariaDB, WiseSphere integration service (C#), Grafana
+#   zabbix  -> HUB-ZBX-01  Zabbix server + web + PostgreSQL/TimescaleDB
+#   (Wazuh 4.14 runs on HUB-WZH-01 with the official wazuh-docker single-node stack, see wazuh/README.md)
+# Staging / single host:  docker compose --profile app --profile zabbix up -d
+#
+# Technical Kit fixes applied here (Execution Plan §7):
+#   T-01 WireGuard runs on the HOST (ops/wg-hub-setup.sh); Zabbix 10051 is published on the host's wg0 address.
+#   T-03 STAFF_CIDRS is a separate staff VPN range and never includes 10.250.0.0/16 (client tunnels).
+#   T-04 the integration service exposes only /webhook/* (Zabbix + Wazuh hosts) and /jobs, /metrics (staff VPN).
+#   T-05 TLS options come from a real file provider (traefik/dynamic.yml).
+#   T-06 every image is pinned (hub/.env.example), no "latest".
+name: wisesphere-hub
+
+x-common: &common
+  restart: unless-stopped
+  logging:
+    driver: json-file
+    options: { max-size: "20m", max-file: "5" }
+
+networks:
+  edge:      # Traefik <-> UIs
+  backend:   # apps <-> databases, integration <-> GLPI API (fixed subnet = GLPI API client range)
+    ipam:
+      config:
+        - subnet: ${BACKEND_SUBNET}
+
+volumes:
+  traefik-acme: {}
+  glpi-db: {}
+  glpi-data: {}
+  integration-data: {}
+  grafana-data: {}
+  zabbix-db: {}
+
+services:
+  # ================================================================ edge
+  traefik:
+    <<: *common
+    profiles: [app]
+    image: traefik:${TRAEFIK_TAG}
+    container_name: ws-traefik
+    command:
+      - --providers.docker=true
+      - --providers.docker.exposedbydefault=false
+      - --providers.docker.network=wisesphere-hub_edge
+      - --providers.file.filename=/etc/traefik/dynamic.yml
+      - --entrypoints.web.address=:80
+      - --entrypoints.web.http.redirections.entrypoint.to=websecure
+      - --entrypoints.websecure.address=:443
+      - --entrypoints.websecure.http.tls.options=modern@file
+      - --entrypoints.websecure.http.tls.certresolver=le
+      - --certificatesresolvers.le.acme.email=${ACME_EMAIL}
+      - --certificatesresolvers.le.acme.storage=/acme/acme.json
+      - --certificatesresolvers.le.acme.tlschallenge=true
+      - --accesslog=true
+      - --log.level=INFO
+      - --ping=true
+    ports: ["80:80", "443:443"]
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./traefik/dynamic.yml:/etc/traefik/dynamic.yml:ro
+      - traefik-acme:/acme
+    environment:
+      STAFF_CIDRS: ${STAFF_CIDRS}
+      WEBHOOK_SOURCE_CIDRS: ${WEBHOOK_SOURCE_CIDRS}
+    networks: [edge]
+    healthcheck:
+      test: ["CMD", "traefik", "healthcheck", "--ping"]
+      interval: 30s
+
+  # ================================================================ GLPI 11 (ITSM + CMDB, client portal)
+  glpi-db:
+    <<: *common
+    profiles: [app]
+    image: mariadb:${MARIADB_TAG}
+    container_name: ws-glpi-db
+    environment:
+      MARIADB_ROOT_PASSWORD: ${GLPI_DB_ROOT_PASSWORD}
+      MARIADB_DATABASE: glpi
+      MARIADB_USER: glpi
+      MARIADB_PASSWORD: ${GLPI_DB_PASSWORD}
+      TZ: ${TZ}
+    command: ["--character-set-server=utf8mb4", "--collation-server=utf8mb4_unicode_ci", "--innodb-buffer-pool-size=2G"]
+    volumes: [glpi-db:/var/lib/mysql]
+    networks: [backend]
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      retries: 30
+
+  glpi:
+    <<: *common
+    profiles: [app]
+    image: glpi/glpi:${GLPI_TAG}
+    container_name: ws-glpi
+    depends_on:
+      glpi-db: { condition: service_healthy }
+    environment:
+      GLPI_DB_HOST: glpi-db
+      GLPI_DB_PORT: 3306
+      GLPI_DB_NAME: glpi
+      GLPI_DB_USER: glpi
+      GLPI_DB_PASSWORD: ${GLPI_DB_PASSWORD}
+      TZ: ${TZ}
+    volumes: [glpi-data:/var/glpi]
+    networks: [edge, backend]
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.glpi.rule=Host(`${GLPI_HOST}`)
+      - traefik.http.routers.glpi.entrypoints=websecure
+      - traefik.http.routers.glpi.middlewares=secure-headers@file
+      - traefik.http.services.glpi.loadbalancer.server.port=80
+      # The REST API is internal only (the integration service uses http://glpi/apirest.php on the backend network)
+      - traefik.http.routers.glpi-api-block.rule=Host(`${GLPI_HOST}`) && (PathPrefix(`/apirest.php`) || PathPrefix(`/api.php`))
+      - traefik.http.routers.glpi-api-block.entrypoints=websecure
+      - traefik.http.routers.glpi-api-block.middlewares=staff-only@file
+      - traefik.http.routers.glpi-api-block.service=glpi
+      - traefik.http.routers.glpi-api-block.priority=100
+
+  # ================================================================ WiseSphere integration service (C# .NET 10, replaces n8n)
+  ws-integration:
+    <<: *common
+    profiles: [app]
+    image: ${INTEGRATION_IMAGE}
+    container_name: ws-integration
+    depends_on: [glpi]
+    environment:
+      TZ: ${TZ}
+      WS__Integration__WebhookSecret: ${WS_WEBHOOK_SECRET}
+      WS__Integration__Ids__RequestTypeMonitoring: ${WS_GLPI_ID_REQTYPE_MONITORING}
+      WS__Integration__Ids__RequestTypeSecurity: ${WS_GLPI_ID_REQTYPE_SECURITY}
+      WS__Integration__Ids__GroupNoc: ${WS_GLPI_ID_GROUP_NOC}
+      WS__Integration__Ids__GroupSoc: ${WS_GLPI_ID_GROUP_SOC}
+      WS__Integration__Ids__GroupSdm: ${WS_GLPI_ID_GROUP_SDM}
+      WS__Integration__Ids__SolutionType: ${WS_GLPI_ID_SOLUTIONTYPE}
+      WS__Glpi__ApiUrl: http://glpi/apirest.php
+      WS__Glpi__AppToken: ${WS_GLPI_APP_TOKEN}
+      WS__Glpi__User: svc-integration
+      WS__Glpi__Password: ${WS_GLPI_SVC_PASSWORD}
+      # Firewall API keys per opted-in client (SOC-04), from the vault, e.g.:
+      # WS__Firewalls__CL001__ApiKey: ${FW_KEY_CL001}
+      WS__Sms__Url: ${SMS_URL}
+      WS__Sms__KeyHeader: ${SMS_KEY_HEADER}
+      WS__Sms__Key: ${SMS_KEY}
+      WS__Sms__Numbers__noc: ${ONCALL_NOC}
+      WS__Sms__Numbers__soc: ${ONCALL_SOC}
+      WS__Sms__Numbers__desk: ${DESK_PHONE}
+      WS__Sms__Numbers__integration: ${ONCALL_INTEGRATION}
+    volumes:
+      - ../config:/config:ro            # tenants.yaml + sla.yaml (single source of truth)
+      - integration-data:/data          # SMS dedupe + processed surveys
+    networks: [edge, backend]
+    labels:
+      - traefik.enable=true
+      - traefik.http.services.integration.loadbalancer.server.port=8080
+      # Webhooks: only the Zabbix server and the Wazuh manager (T-04). No UI is exposed.
+      - traefik.http.routers.integration-hooks.rule=Host(`${INTEGRATION_HOST}`) && PathPrefix(`/webhook/`)
+      - traefik.http.routers.integration-hooks.entrypoints=websecure
+      - traefik.http.routers.integration-hooks.middlewares=webhook-sources@file
+      - traefik.http.routers.integration-hooks.service=integration
+      # Jobs and metrics: staff VPN only
+      - traefik.http.routers.integration-ops.rule=Host(`${INTEGRATION_HOST}`) && (PathPrefix(`/jobs/`) || Path(`/metrics`) || Path(`/readyz`))
+      - traefik.http.routers.integration-ops.entrypoints=websecure
+      - traefik.http.routers.integration-ops.middlewares=staff-only@file
+      - traefik.http.routers.integration-ops.service=integration
+
+  # ================================================================ WiseSphere portal (Angular + ASP.NET Core)
+  ws-portal:
+    <<: *common
+    profiles: [app]
+    image: ${PORTAL_IMAGE}
+    container_name: ws-portal
+    depends_on: [glpi]
+    environment:
+      TZ: ${TZ}
+      WS__Portal__GlpiTimeZone: ${TZ}
+      WS__Portal__GlpiPublicUrl: https://${GLPI_HOST}
+      WS__Portal__SecureCookies: "true"
+      WS__Glpi__ApiUrl: http://glpi/apirest.php
+      WS__Glpi__AppToken: ${WS_GLPI_PORTAL_APP_TOKEN}
+      WS__Zabbix__ApiUrl: ${ZABBIX_API_URL}
+      WS__Zabbix__ApiToken: ${ZABBIX_PORTAL_TOKEN}
+      WS__Integration__Url: http://ws-integration:8080
+      WS__Integration__Secret: ${WS_WEBHOOK_SECRET}
+    networks: [edge, backend]
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.portal.rule=Host(`${PORTAL_HOST}`)
+      - traefik.http.routers.portal.entrypoints=websecure
+      - traefik.http.routers.portal.middlewares=secure-headers@file
+      - traefik.http.services.portal.loadbalancer.server.port=8080
+
+  # ================================================================ Grafana 13 OSS (NOC wall + one org per client)
+  grafana:
+    <<: *common
+    profiles: [app]
+    image: grafana/grafana:${GRAFANA_TAG}
+    container_name: ws-grafana
+    environment:
+      GF_SERVER_ROOT_URL: https://${GRAFANA_HOST}/
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD}
+      GF_SECURITY_COOKIE_SECURE: "true"
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+      GF_PLUGINS_PREINSTALL: ${GRAFANA_PLUGINS}
+      GF_BRANDING_APP_TITLE: ${BRAND_NAME}
+      WS_ZABBIX_API_URL: ${ZABBIX_API_URL}
+      WS_ZABBIX_API_TOKEN: ${ZABBIX_GRAFANA_TOKEN}
+      WS_GLPI_DB_HOST: glpi-db:3306
+      WS_GLPI_DB_RO_PASSWORD: ${GLPI_DB_RO_PASSWORD}
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ../grafana/provisioning:/etc/grafana/provisioning:ro
+      - ../grafana/dashboards:/var/lib/grafana/dashboards:ro
+    networks: [edge, backend]
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.grafana.rule=Host(`${GRAFANA_HOST}`)
+      - traefik.http.routers.grafana.entrypoints=websecure
+      - traefik.http.routers.grafana.middlewares=secure-headers@file
+      - traefik.http.services.grafana.loadbalancer.server.port=3000
+
+  # ================================================================ Zabbix 8.0 LTS (HUB-ZBX-01)
+  zabbix-db:
+    <<: *common
+    profiles: [zabbix]
+    image: timescale/timescaledb:${TIMESCALEDB_TAG}
+    container_name: ws-zabbix-db
+    environment:
+      POSTGRES_DB: zabbix
+      POSTGRES_USER: zabbix
+      POSTGRES_PASSWORD: ${ZABBIX_DB_PASSWORD}
+    volumes: [zabbix-db:/var/lib/postgresql/data]
+    networks: [backend]
+    shm_size: 1g
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U zabbix -d zabbix"]
+      interval: 10s
+      retries: 30
+
+  zabbix-server:
+    <<: *common
+    profiles: [zabbix]
+    image: zabbix/zabbix-server-pgsql:${ZABBIX_TAG}
+    container_name: ws-zabbix-server
+    depends_on:
+      zabbix-db: { condition: service_healthy }
+    environment:
+      DB_SERVER_HOST: zabbix-db
+      POSTGRES_DB: zabbix
+      POSTGRES_USER: zabbix
+      POSTGRES_PASSWORD: ${ZABBIX_DB_PASSWORD}
+      ENABLE_TIMESCALEDB: "true"
+      ZBX_CACHESIZE: 512M
+      ZBX_HISTORYCACHESIZE: 256M
+      ZBX_VALUECACHESIZE: 512M
+      ZBX_STARTPOLLERS: 20
+      ZBX_STARTPREPROCESSORS: 8
+      ZBX_STARTPINGERS: 4
+      ZBX_STARTALERTERS: 5
+      ZBX_PROXYCONFIGFREQUENCY: 60
+    ports:
+      # Active proxies reach the server only through the WireGuard tunnel (T-01: wg0 lives on the host)
+      - "${WG_HUB_IP}:10051:10051"
+    networks: [backend]
+
+  zabbix-web:
+    <<: *common
+    profiles: [zabbix]
+    image: zabbix/zabbix-web-nginx-pgsql:${ZABBIX_TAG}
+    container_name: ws-zabbix-web
+    depends_on: [zabbix-server]
+    environment:
+      DB_SERVER_HOST: zabbix-db
+      POSTGRES_DB: zabbix
+      POSTGRES_USER: zabbix
+      POSTGRES_PASSWORD: ${ZABBIX_DB_PASSWORD}
+      ZBX_SERVER_HOST: zabbix-server
+      PHP_TZ: ${TZ}
+    networks: [edge, backend]
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.zabbix.rule=Host(`${ZABBIX_HOST}`)
+      - traefik.http.routers.zabbix.entrypoints=websecure
+      - traefik.http.routers.zabbix.middlewares=staff-only@file,secure-headers@file
+      - traefik.http.services.zabbix.loadbalancer.server.port=8080

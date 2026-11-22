@@ -1,0 +1,19 @@
+# Keep Linux line endings for everything that runs in Linux containers or WSL,
+# even when the repository is cloned on Windows (core.autocrlf=true would break them).
+*.sh      text eol=lf
+*.py      text eol=lf
+*.yml     text eol=lf
+*.yaml    text eol=lf
+*.json    text eol=lf
+*.conf    text eol=lf
+*.template text eol=lf
+*.js      text eol=lf
+Dockerfile text eol=lf
+Makefile  text eol=lf
+.env.example text eol=lf
+*.base    text eol=lf
+# binaries
+*.png binary
+*.pdf binary
+*.docx binary
+*.ico binary

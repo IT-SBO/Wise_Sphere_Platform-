@@ -1,0 +1,42 @@
+name: ci
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  dotnet:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with: { dotnet-version: "10.0.x" }
+      - run: dotnet build WiseSphere.slnx -c Release
+      - run: dotnet test WiseSphere.slnx -c Release --no-build
+      - name: Integration service image
+        run: docker build -f src/WiseSphere.Integration/Dockerfile -t wisesphere/integration:ci .
+      - name: Portal image (Angular + ASP.NET Core)
+        run: docker build -f src/WiseSphere.Portal/Dockerfile -t wisesphere/portal:ci .
+  web:
+    runs-on: ubuntu-24.04
+    defaults: { run: { working-directory: web/portal } }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: "22", cache: npm, cache-dependency-path: web/portal/package-lock.json }
+      - run: npm ci
+      - run: npx ng build --configuration production
+  tooling:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.13" }
+      - run: pip install -r requirements.txt
+      - run: python -m pytest -q tests/unit
+      - name: Compose files and shell scripts
+        run: |
+          docker compose -f hub/docker-compose.yml --env-file hub/.env.example --profile app --profile zabbix config -q
+          docker compose -f lab/docker-compose.yml --env-file lab/.env.example config -q
+          docker compose -f spoke/docker-compose.yml --env-file spoke/.env.example --profile wazuh-relay config -q
+          bash -n spoke/install-spoke.sh ops/*.sh scripts/*.sh tests/*.sh

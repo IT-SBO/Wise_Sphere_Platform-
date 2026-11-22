@@ -1,0 +1,55 @@
+# WiseSphere SPOKE appliance - one per client site (PRD §5.1, R-10, R-11)
+#
+# Host side (installed by install-spoke.sh, not containers):
+#   * WireGuard wg0 -> hub UDP 51820, outbound only (NFR-SEC-01)   [T-01/T-02: tunnel on the host]
+#   * GLPI Agent (network discovery + SNMP inventory, --tag=<CLIENT>) ITAM-01/02
+# Containers:
+#   * Zabbix 8.0 active proxy, SQLite, PSK, 72 h offline buffer      NOC-01, NOC-03
+#   * optional Wazuh relay (nginx stream) so client servers never talk to the internet (C-03)
+name: wisesphere-spoke
+
+services:
+  zabbix-proxy:
+    image: zabbix/zabbix-proxy-sqlite3:${ZABBIX_TAG}
+    container_name: ws-zabbix-proxy
+    restart: unless-stopped
+    environment:
+      ZBX_PROXYMODE: 0                       # active: the proxy connects to the server, nothing inbound
+      ZBX_HOSTNAME: ${PROXY_NAME}            # e.g. CL001-KWI-PRX01 (registered on the hub by new_spoke.py)
+      ZBX_SERVER_HOST: ${WG_HUB_IP}          # through the tunnel
+      ZBX_TLSCONNECT: psk
+      ZBX_TLSACCEPT: psk
+      ZBX_TLSPSKIDENTITY: ${PROXY_PSK_IDENTITY}
+      ZBX_TLSPSKFILE: /var/lib/zabbix/enc/proxy.psk
+      ZBX_PROXYOFFLINEBUFFER: 72             # hours of data kept while the hub is unreachable
+      ZBX_PROXYBUFFERMODE: hybrid
+      ZBX_PROXYMEMORYBUFFERSIZE: 64M
+      ZBX_CONFIGFREQUENCY: 60
+      ZBX_STARTPINGERS: 4
+      ZBX_STARTPOLLERS: ${PROXY_POLLERS:-10}
+      ZBX_STARTSNMPPOLLERS: ${PROXY_SNMP_POLLERS:-5}
+      ZBX_TIMEOUT: 10
+    volumes:
+      - ./secrets/proxy.psk:/var/lib/zabbix/enc/proxy.psk:ro
+      - proxy-data:/var/lib/zabbix/db_data
+    network_mode: host                       # reaches LAN devices for SNMP/ICMP and the hub via wg0
+    cap_add: [NET_RAW]                       # ICMP pings
+
+  # Optional - enable with: docker compose --profile wazuh-relay up -d
+  wazuh-relay:
+    image: nginx:${NGINX_TAG}
+    container_name: ws-wazuh-relay
+    restart: unless-stopped
+    profiles: [wazuh-relay]
+    environment:
+      WAZUH_MANAGER_IP: ${WAZUH_MANAGER_IP}
+    volumes:
+      - ./wazuh-relay.conf.template:/etc/nginx/templates/stream.conf.template:ro
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    # T-02: published on the LAN address only; ufw allows 1514/1515 from CLIENT_LAN only
+    ports:
+      - "${SPOKE_LAN_IP}:1514:1514"
+      - "${SPOKE_LAN_IP}:1515:1515"
+
+volumes:
+  proxy-data: {}

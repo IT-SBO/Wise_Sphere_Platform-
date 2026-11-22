@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <!-- Portal backend: API for the Angular front-end (served from wwwroot). Auth = the user's GLPI account. -->
+  <PropertyGroup>
+    <NoWarn>$(NoWarn);CA1001;CA1861</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\WiseSphere.Glpi\WiseSphere.Glpi.csproj" />
+  </ItemGroup>
+</Project>

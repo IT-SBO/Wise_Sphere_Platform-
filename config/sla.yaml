@@ -1,0 +1,47 @@
+# SLA matrix per package tier (PRD §8, ITSM-02, INT-04).
+# Times in minutes. "tto" = time to own (response), "ttr" = time to resolve.
+# Proposals for the commercial team: they must match the staffing rota (§10).
+
+calendars:
+  KW:
+    name: "Kuwait business hours"
+    timezone: Asia/Kuwait
+    # Sunday-Thursday 08:00-17:00 (0 = Sunday)
+    days: [0, 1, 2, 3, 4]
+    start: "08:00"
+    end: "17:00"
+  SA:
+    name: "KSA business hours"
+    timezone: Asia/Riyadh
+    days: [0, 1, 2, 3, 4]
+    start: "08:00"
+    end: "17:00"
+
+tiers:
+  silver:
+    label: "Silver - NOC"
+    after_hours_priorities: [5, 6]      # P1 only out of hours
+    priorities:                         # GLPI priority: 6 major, 5 very high (P1), 4 high (P2), 3 medium (P3), 2-1 low (P4)
+      5: { tto: 30,  ttr: 480,  business_hours: false }
+      4: { tto: 120, ttr: 1440, business_hours: true }
+      3: { tto: 240, ttr: 2880, business_hours: true }
+      2: { tto: 480, ttr: 4320, business_hours: true }
+  gold:
+    label: "Gold - NOC + Patching"
+    after_hours_priorities: [4, 5, 6]   # P1-P2
+    priorities:
+      5: { tto: 15,  ttr: 240,  business_hours: false }
+      4: { tto: 60,  ttr: 720,  business_hours: false }
+      3: { tto: 240, ttr: 2880, business_hours: true }
+      2: { tto: 480, ttr: 4320, business_hours: true }
+  platinum:
+    label: "Platinum - Full MSSP"
+    after_hours_priorities: [4, 5, 6]   # P1-P2 + security
+    priorities:
+      5: { tto: 15,  ttr: 240,  business_hours: false }
+      4: { tto: 60,  ttr: 720,  business_hours: false }
+      3: { tto: 240, ttr: 2880, business_hours: true }
+      2: { tto: 480, ttr: 4320, business_hours: true }
+
+# WF-04 warns this many minutes before a breach (TC-06)
+at_risk_minutes: 15

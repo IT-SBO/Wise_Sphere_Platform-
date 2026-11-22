@@ -1,0 +1,11 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/WiseSphere.Core/WiseSphere.Core.csproj" />
+    <Project Path="src/WiseSphere.Glpi/WiseSphere.Glpi.csproj" />
+    <Project Path="src/WiseSphere.Integration/WiseSphere.Integration.csproj" />
+    <Project Path="src/WiseSphere.Portal/WiseSphere.Portal.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/WiseSphere.Core.Tests/WiseSphere.Core.Tests.csproj" />
+  </Folder>
+</Solution>

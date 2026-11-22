@@ -1,0 +1,28 @@
+# Read-only datasources for the NOC wall and client views (PRD 5.1 WBS 5.1: "datasources (read-only)")
+apiVersion: 1
+datasources:
+  - name: GLPI
+    uid: ws-glpi
+    type: mysql
+    url: ${WS_GLPI_DB_HOST}
+    user: grafana_ro             # SELECT-only user created at bootstrap
+    jsonData:
+      database: glpi
+      maxOpenConns: 10
+      timezone: "+03:00"
+    secureJsonData:
+      password: ${WS_GLPI_DB_RO_PASSWORD}
+    editable: false
+
+  - name: Zabbix
+    uid: ws-zabbix
+    type: alexanderzobnin-zabbix-datasource
+    url: ${WS_ZABBIX_API_URL}
+    jsonData:
+      authType: token
+      trends: true
+      trendsFrom: 7d
+      trendsRange: 4d
+    secureJsonData:
+      apiToken: ${WS_ZABBIX_API_TOKEN}
+    editable: false

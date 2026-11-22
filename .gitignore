@@ -1,0 +1,24 @@
+# secrets and generated per-environment files
+.env
+lab/.env
+hub/.env
+lab/n8n.env
+hub/n8n.env
+lab/glpi-ids.json
+hub/glpi-ids.json
+lab/e2e-report.json
+bundles/
+workflow-local.json
+branding/build/
+__pycache__/
+*.pyc
+node_modules/
+
+# .NET build output
+bin/
+obj/
+*.user
+TestResults/
+web/portal/node_modules/
+web/portal/dist/
+web/portal/.angular/

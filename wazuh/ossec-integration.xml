@@ -1,0 +1,8 @@
+<!-- Wazuh manager /var/ossec/etc/ossec.conf - add inside <ossec_config> (SOC-02, INT-02) -->
+<integration>
+  <name>custom-wisesphere</name>
+  <hook_url>https://integration.internal.example.com/webhook/wazuh-alert</hook_url>
+  <api_key>REPLACE_WITH_WS_WEBHOOK_SECRET_FROM_VAULT</api_key>
+  <level>10</level>
+  <alert_format>json</alert_format>
+</integration>
