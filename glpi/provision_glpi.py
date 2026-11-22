@@ -9,7 +9,7 @@ Creates or updates, from config/tenants.yaml and config/sla.yaml:
   * solution type "Auto-recovered (monitoring)"
   * business-hours calendars per country and one SLM per tier+country with TTO/TTR
     SLAs per priority, plus ticket rules that attach them per client entity          ITSM-02
-  * the n8n service account and its API client (app token, IP range)                   INT-05
+  * the integration service account and its API client (app token, IP range)                   INT-05
 
 Usage (run on the hub host, or let scripts/bootstrap_lab.sh run it):
   provision_glpi.py --url http://localhost:8090/apirest.php --admin-user glpi --admin-password ... \
@@ -96,8 +96,8 @@ def provision(g: Glpi, tenants: dict, sla: dict, args) -> dict:
         print(f"warn: could not rename root entity: {e}", file=sys.stderr)
 
     ids["requesttypes"] = {
-        "monitoring": g.ensure("RequestType", {"name": "Monitoring"}, {"is_active": 1, "is_ticketheader": 1, "comment": "Zabbix via n8n WF-01"}),
-        "security": g.ensure("RequestType", {"name": "Security"}, {"is_active": 1, "is_ticketheader": 1, "comment": "Wazuh via n8n WF-02"}),
+        "monitoring": g.ensure("RequestType", {"name": "Monitoring"}, {"is_active": 1, "is_ticketheader": 1, "comment": "Zabbix via WiseSphere integration (INT-01)"}),
+        "security": g.ensure("RequestType", {"name": "Security"}, {"is_active": 1, "is_ticketheader": 1, "comment": "Wazuh via WiseSphere integration (INT-02)"}),
     }
     ids["groups"] = {
         key: g.ensure("Group", {"name": name}, {"entities_id": 0, "is_recursive": 1, "is_assign": 1, "is_requester": 1, "is_notify": 1})
@@ -181,7 +181,7 @@ def ensure_sla_rule(g: Glpi, name: str, entity_id: int, priority: int, tto_id: i
 
 def ensure_service_user(g: Glpi, args) -> dict:
     users = g.find("User", name=args.svc_user)
-    values = {"name": args.svc_user, "realname": "WiseSphere n8n service account", "is_active": 1,
+    values = {"name": args.svc_user, "realname": "WiseSphere integration service", "is_active": 1,
               "password": args.svc_password, "password2": args.svc_password}
     if users:
         uid = int(users[0]["id"])
@@ -204,10 +204,10 @@ def ensure_service_user(g: Glpi, args) -> dict:
 
 def ensure_api_client(g: Glpi, args) -> dict:
     net = ipaddress.ip_network(args.api_cidr, strict=False)
-    values = {"name": "n8n", "is_active": 1, "ipv4_range_start": str(net.network_address),
+    values = {"name": "wisesphere-integration", "is_active": 1, "ipv4_range_start": str(net.network_address),
               "ipv4_range_end": str(net.broadcast_address), "app_token": args.app_token, "dolog_method": 0,
-              "entities_id": 0, "is_recursive": 1, "comment": "WiseSphere n8n integration (INT-05). Rotate via provision_glpi.py."}
-    found = g.find("APIClient", name="n8n")
+              "entities_id": 0, "is_recursive": 1, "comment": "WiseSphere integration service (INT-05). Rotate via provision_glpi.py."}
+    found = g.find("APIClient", name="wisesphere-integration")
     if found:
         cid = int(found[0]["id"])
         g.call("PUT", f"/APIClient/{cid}", {"input": values})
@@ -224,13 +224,13 @@ def main() -> int:
     ap.add_argument("--admin-app-token", default=os.environ.get("GLPI_ADMIN_APP_TOKEN"), help="if the bootstrap API client needs one")
     ap.add_argument("--tenants", default=str(ROOT / "config/tenants.yaml"))
     ap.add_argument("--sla", default=str(ROOT / "config/sla.yaml"))
-    ap.add_argument("--svc-user", default="svc-n8n")
+    ap.add_argument("--svc-user", default="svc-integration")
     ap.add_argument("--svc-password", default=os.environ.get("WS_GLPI_SVC_PASSWORD"))
     ap.add_argument("--rotate-svc-password", action="store_true", help="also reset the password of an existing service account")
     ap.add_argument("--svc-profile", default=os.environ.get("WS_GLPI_SVC_PROFILE", "Technician"),
-                    help="GLPI profile for the n8n account (least privilege, INT-05)")
-    ap.add_argument("--app-token", default=os.environ.get("WS_GLPI_APP_TOKEN"), help="app token for the n8n API client")
-    ap.add_argument("--api-cidr", default=os.environ.get("WS_GLPI_API_CIDR", "127.0.0.1/32"), help="source range allowed for the n8n API client")
+                    help="GLPI profile for the integration service account (least privilege, INT-05)")
+    ap.add_argument("--app-token", default=os.environ.get("WS_GLPI_APP_TOKEN"), help="app token for the integration service API client")
+    ap.add_argument("--api-cidr", default=os.environ.get("WS_GLPI_API_CIDR", "127.0.0.1/32"), help="source range allowed for the integration service API client")
     ap.add_argument("--out", help="write resulting ids (no secrets) to this JSON file")
     args = ap.parse_args()
     if not args.admin_password:

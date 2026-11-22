@@ -4,7 +4,7 @@
   python3 tests/e2e_lab.py            # after: make lab-up lab-bootstrap
 
 Real path: Zabbix trigger (fired with zabbix_sender) -> Zabbix action -> media type ->
-n8n WF-01 -> GLPI ticket. Results are read from the GLPI and Zabbix databases.
+WiseSphere integration service (C#) -> GLPI ticket. Results are read from the GLPI and Zabbix databases.
 
   TC-01  problem -> ticket in client entity <= 60 s (NFR-PERF-01)
   TC-02  recovery -> ticket solved automatically
@@ -26,7 +26,7 @@ from pathlib import Path
 
 LAB = Path(__file__).resolve().parent.parent / "lab"
 ENV = dict(l.split("=", 1) for l in (LAB / ".env").read_text().splitlines() if "=" in l and not l.startswith("#"))
-N8N = f"http://localhost:{ENV['N8N_PORT']}"
+SERVICE = f"http://localhost:{ENV['INTEGRATION_PORT']}"
 SMS = f"http://localhost:{ENV['SMS_PORT']}"
 RESULTS: list[tuple[str, bool, str]] = []
 
@@ -50,7 +50,7 @@ def sender(item: str, value: int):
 
 
 def post(path: str, body: dict, secret: str | None = None) -> tuple[int, dict]:
-    req = urllib.request.Request(N8N + path, data=json.dumps(body).encode(), method="POST",
+    req = urllib.request.Request(SERVICE + path, data=json.dumps(body).encode(), method="POST",
                                  headers={"Content-Type": "application/json", "X-WS-Secret": secret or ENV["WS_WEBHOOK_SECRET"]})
     try:
         with urllib.request.urlopen(req, timeout=60) as r:
@@ -63,9 +63,9 @@ def post(path: str, body: dict, secret: str | None = None) -> tuple[int, dict]:
             return e.code, {"raw": raw.decode(errors="replace")}
 
 
-def n8n_execute(workflow_id: str):
-    # separate ports so the CLI process does not clash with the running instance
-    sh("docker", "exec", "-e", "N8N_RUNNERS_BROKER_PORT=5690", "-e", "N8N_PORT=5691", "ws-n8n", "n8n", "execute", f"--id={workflow_id}")
+def run_job(name: str):
+    req = urllib.request.Request(f"{SERVICE}/jobs/{name}/run", data=b"", method="POST", headers={"X-WS-Secret": ENV["WS_WEBHOOK_SECRET"]})
+    urllib.request.urlopen(req, timeout=60).read()
 
 
 def sms_messages() -> list[dict]:
@@ -112,6 +112,7 @@ def main() -> int:
         "WHERE name LIKE '[ZBX:%' OR name LIKE '[STORM:%' OR name LIKE '[WZH:%'")
     sms_clear()
     stamp = int(time.time())
+    zbx_start = int(zsql("SELECT COALESCE(MAX(alertid),0) FROM alerts")[0][0])
 
     # ---- SEC
     code, _ = post("/webhook/zbx-event", {"event_id": "1"}, secret="wrong")
@@ -154,7 +155,7 @@ def main() -> int:
                                              "event_name": f"SLA test {stamp}", "host": "cl001-kwi-lab", "client_code": "CL001"})
     tid = body.get("ticket_id")
     sql(f"UPDATE glpi_tickets SET time_to_resolve = DATE_ADD(NOW(), INTERVAL 10 MINUTE) WHERE id={tid}")
-    n8n_execute("wsWF04SlaWatch00")
+    run_job("sla-watch")
     msgs, _ = wait("sla sms", lambda: [m for m in sms_messages() if f"#{tid}" in m.get("message", "") and "AT RISK" in m["message"]], timeout=60)
     check("TC-06 SLA at risk -> SMS", bool(msgs), msgs[0]["message"][:90] if msgs else f"ticket {tid}")
 
@@ -197,7 +198,7 @@ def main() -> int:
         sql(f"UPDATE glpi_tickets SET status=6 WHERE id={storm[0][0]}")  # close so later runs start clean
 
     # ---- Zabbix action log
-    failed = zsql("SELECT COUNT(*) FROM alerts WHERE status=2")[0][0]
+    failed = zsql(f"SELECT COUNT(*) FROM alerts WHERE status=2 AND alertid > {zbx_start}")[0][0]
     check("Zabbix action log has no failed alerts", failed == "0", f"failed={failed}")
     return summary()
 

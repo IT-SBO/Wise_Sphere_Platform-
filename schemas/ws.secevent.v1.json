@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://wisesphere.local/schemas/ws.secevent.v1.json",
   "title": "ws.secevent.v1 - Wazuh security alert (INT-02)",
-  "description": "Sent by the Wazuh integration 'custom-n8n' (wazuh/custom-n8n.py) to n8n WF-02 (POST /webhook/wazuh-alert) for rule level >= 10.",
+  "description": "Sent by the Wazuh integration 'custom-wisesphere' (wazuh/custom-wisesphere.py) to the integration service (POST /webhook/wazuh-alert) for rule level >= 10.",
   "type": "object",
   "required": ["schema", "alert_id", "rule", "agent"],
   "properties": {

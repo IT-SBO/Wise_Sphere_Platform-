@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://wisesphere.local/schemas/ws.event.v1.json",
   "title": "ws.event.v1 - Zabbix monitoring event (INT-01)",
-  "description": "Sent by the Zabbix 'WiseSphere n8n' media type to n8n WF-01 (POST /webhook/zbx-event). Unresolved Zabbix macros (values that still look like {MACRO}) are treated as empty. Either 'status' or 'event_value' ({EVENT.VALUE}: 1 problem, 0 recovery) must be present; 'event_update' = {EVENT.UPDATE.STATUS} marks acknowledgements/comments.",
+  "description": "Sent by the Zabbix 'WiseSphere' media type to the integration service (POST /webhook/zbx-event). Unresolved Zabbix macros (values that still look like {MACRO}) are treated as empty. Either 'status' or 'event_value' ({EVENT.VALUE}: 1 problem, 0 recovery) must be present; 'event_update' = {EVENT.UPDATE.STATUS} marks acknowledgements/comments.",
   "type": "object",
   "required": [
     "schema",

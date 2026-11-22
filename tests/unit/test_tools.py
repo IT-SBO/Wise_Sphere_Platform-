@@ -43,7 +43,7 @@ def test_sla_tiers_cover_all_priorities():
 
 
 def test_wazuh_integration_produces_valid_secevent():
-    mod = load("custom_n8n", "wazuh/custom-n8n.py")
+    mod = load("custom_wisesphere", "wazuh/custom-wisesphere.py")
     schema = json.loads((ROOT / "schemas/ws.secevent.v1.json").read_text())
     alert = {"id": "1.2", "timestamp": "2026-11-22T10:00:00Z",
              "rule": {"id": "5712", "level": 10, "description": "sshd brute force", "groups": ["sshd"], "mitre": {"id": ["T1110"]}},
@@ -61,20 +61,13 @@ def test_brand_css_renders_tokens():
     assert tokens["colors"]["primary"] in css and "{{" not in css
 
 
-def test_workflows_reference_only_known_credentials_and_no_secrets():
-    for p in (ROOT / "n8n/workflows").glob("*.json"):
-        wf = json.loads(p.read_text())
-        text = p.read_text()
-        assert "PUT_APP_TOKEN_HERE" not in text and "user_token " not in text
-        for node in wf["nodes"]:
-            for cred in (node.get("credentials") or {}).values():
-                assert cred["id"] in {"wsGlpiApiCred001", "wsWebhookSecret1", "wsSmsProvider001"}, (p.name, node["name"])
-        names = {n["name"] for n in wf["nodes"]}
-        for src, outs in wf["connections"].items():
-            assert src in names
-            for branch in outs["main"]:
-                for link in branch:
-                    assert link["node"] in names, (p.name, link)
+def test_compose_files_pass_secrets_only_through_env():
+    for p in ("hub/docker-compose.yml", "lab/docker-compose.yml"):
+        text = (ROOT / p).read_text()
+        for secret in ("WebhookSecret", "Glpi__Password", "Glpi__AppToken", "Sms__Key"):
+            for line in text.splitlines():
+                if secret + ":" in line:
+                    assert "${" in line, (p, line.strip())
 
 
 def test_zabbix_media_params_match_event_schema():

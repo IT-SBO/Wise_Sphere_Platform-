@@ -4,7 +4,7 @@
 #
 # Dumps databases, archives volumes and configs, and ships them to an encrypted, off-site restic
 # repository (retention 30 daily / 12 monthly). Restore drill: ops/restore-drill.md (TC-11, WBS 5.5).
-# Covers: GLPI (MariaDB + files), n8n (PostgreSQL), Zabbix (PostgreSQL), Grafana, hub configs.
+# Covers: GLPI (MariaDB + files), integration service state, Zabbix (PostgreSQL), Grafana, hub configs.
 # Wazuh (T-07): run with --wazuh on HUB-WZH-01 to add keys, rules, decoders and an indexer snapshot.
 set -euo pipefail
 HUB_DIR="${HUB_DIR:-/opt/wisesphere/hub}"
@@ -22,9 +22,9 @@ if running ws-glpi-db; then
   log "GLPI files (documents, config incl. GLPI encryption key)"
   docker run --rm --volumes-from ws-glpi -v "$STAGE":/out alpine:3.24.4 tar czf "/out/glpi-files-$STAMP.tgz" -C /var/glpi .
 fi
-if running ws-n8n-db; then
-  log "n8n database (workflows, credentials - encrypted with N8N_ENCRYPTION_KEY, keep that key in the vault)"
-  docker exec ws-n8n-db pg_dump -U n8n -Fc n8n > "$STAGE/n8n-$STAMP.dump"
+if running ws-integration; then
+  log "integration service state (SMS dedupe, processed surveys - small, rebuildable)"
+  docker run --rm --volumes-from ws-integration -v "$STAGE":/out alpine:3.24.4 tar czf "/out/integration-$STAMP.tgz" -C /data .
 fi
 if running ws-zabbix-db; then
   log "Zabbix database"

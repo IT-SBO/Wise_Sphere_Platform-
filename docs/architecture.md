@@ -2,7 +2,7 @@
 
 Source of truth: **WS-PRD-001 v2.0** (PRD & implementation plan) and the PoC (Zabbix 7 → n8n → GLPI 10, Nov 2026).
 This repository is the platform as code (NFR-OPS-04): Compose stacks, workflows, provisioning, dashboards.
-Per PRD R-06 there is **no custom UI in Release 1** – GLPI is the ticketing tool and client portal, Grafana the dashboards.
+Decision (Nov 2026): custom code is **C# / .NET 10** (integration service) and **Angular** (WiseSphere portal, pending management sign-off as a change to PRD R-06), maintained by the in-house team. n8n from the PoC is retired.
 
 ## Data flow
 
@@ -12,8 +12,8 @@ Per PRD R-06 there is **no custom UI in Release 1** – GLPI is the ticketing to
  │ Zabbix active proxy (PSK,72h)├────────────────────────►│ Zabbix 8.0 server ──action──► media type      │
  │ GLPI Agent  --tag=CLnnn      │   TCP 10051 in tunnel   │                         ws.event.v1 + secret │
  │ Wazuh relay (optional)       │                         │                              ▼               │
- └──────────────▲───────────────┘                         │  n8n 2.x (internal) WF-01..04, WF-99         │
-   Wazuh agents on client servers ──1514/1515──► relay ──►│  Wazuh 4.14 ──custom-n8n──► ws.secevent.v1   │
+ └──────────────▲───────────────┘                         │  WiseSphere integration service (C# .NET 10) │
+   Wazuh agents on client servers ──1514/1515──► relay ──►│  Wazuh 4.14 ──custom-wisesphere──► ws.secevent.v1   │
                                                           │        ▼ GLPI REST API (app token + svc acct) │
                                                           │  GLPI 11: entity per client, SLA rules, CSAT  │
                                                           │  Grafana 13: NOC wall, client orgs            │
@@ -25,17 +25,17 @@ Per PRD R-06 there is **no custom UI in Release 1** – GLPI is the ticketing to
 `config/tenants.yaml` → `CLnnn` drives every tool: GLPI entity tag, GLPI Agent tag, Zabbix host groups
 `CLnnn/SITE/Network|Servers` and host tag `client=CLnnn`, Wazuh labels, WireGuard subnet `10.250.nnn.0/24`.
 
-## Workflows (n8n) – logic in `n8n/src/wslib.js`, unit tested, inlined by `n8n/build_workflows.py`
-| Flow | Trigger | Behaviour |
+## Integration service (C# .NET 10) – `src/`
+| Function | Trigger | Behaviour |
 |---|---|---|
-| WF-01 Zabbix→GLPI (INT-01) | `POST /webhook/zbx-event` | create ticket `[ZBX:<event>]` in client entity with asset link; repeat → follow-up; recovery → solution (auto-solve); >10 problems / 5 min → one `[STORM:CLnnn]` parent + SMS; disaster → SMS; unknown client → root entity, flagged |
-| WF-02 Wazuh→GLPI (INT-02) | `POST /webhook/wazuh-alert` | level ≥10 → SOC ticket `[WZH:agent:rule]`, dedupe while open; ≥12 → SMS. No automatic blocking (C-02) |
-| WF-03 CSAT (INT-03) | daily 08:10 | survey score ≤2 → private service-recovery task for WS-SDM |
-| WF-04 SLA watch (INT-04) | every 5 min | TTO/TTR at T-15 and at breach → SMS; in business hours to the desk, after hours only priorities the tier covers |
-| WF-99 failures (INT-07) | any workflow error | SMS to the integration engineer; failed executions kept for retry |
+| INT-01 Zabbix→GLPI | `POST /webhook/zbx-event` | ticket `[ZBX:<event>]` in client entity with asset link; repeat → follow-up; recovery → solution (auto-solve); >10 problems / 5 min → one `[STORM:CLnnn]` parent + SMS; disaster → SMS; unknown client → root entity, flagged |
+| INT-02 Wazuh→GLPI | `POST /webhook/wazuh-alert` | level ≥10 → SOC ticket `[WZH:agent:rule]`, dedupe while open; ≥12 → SMS. No automatic blocking (C-02) |
+| INT-03 CSAT review | daily 08:10 local | survey score ≤2 → private service-recovery task for WS-SDM |
+| INT-04 SLA watch | every 5 min | TTO/TTR at T-15 and at breach → SMS; desk in business hours, after hours only the priorities the tier covers |
+| INT-07 failures | any processing error | SMS to the integration engineer (max 1 per 10 min per error kind); Zabbix retries the webhook |
 
-All webhooks require the `X-WS-Secret` header (INT-05). Zabbix delivers one alert at a time
-(`maxsessions=1`) so dedupe and storm grouping never race; measured ~1 s per alert in the lab.
+Concurrency: one lock per client – a client's events are processed in order (dedupe and storm grouping stay
+correct) while different clients run in parallel; GLPI sessions are pooled. Measured: 500 alerts in ~20 s, p95 0.49 s.
 
 ## Status against the plan
 
@@ -47,14 +47,14 @@ All webhooks require the `X-WS-Secret` header (INT-05). Zabbix delivers one aler
 | 1.5 | Backups + off-site | `ops/backup-hub.sh` (restic, incl. Wazuh T-07), `ops/restore-drill.md` |
 | 2.1 | Spoke template | `spoke/` – T-02, T-08 fixed; proxy PSK link ✅ tested in lab |
 | 2.2/2.3 | Zabbix server, media type, action, groups | `zabbix/provision_zabbix.py` ✅ tested. Standard template library (SNMP, UPS, web/cert) – next |
-| 3.1/3.2 | n8n + WF-01 | ✅ TC-01..TC-04 pass end to end |
+| 3.1/3.2 | Integration service + INT-01 | ✅ TC-01..TC-04, TC-09 pass end to end (C#) |
 | 3.3 | WF-04 SLA + SMS | ✅ TC-06 passes with the SMS mock; real provider = decision D-04 |
-| 3.4 | Platform self-monitoring | n8n `/metrics` + WF-99; Zabbix checks for proxy last-seen / certs – next |
-| 4.x | Wazuh layer | integration script + WF-02 ✅ (TC-07); Wazuh deployment, DLS roles, approved-block sub-flow – Phase 4 |
+| 3.4 | Platform self-monitoring | service `/metrics`, `/readyz` + failure SMS; Zabbix checks for proxy last-seen / certs – next |
+| 4.x | Wazuh layer | integration script + INT-02 ✅ (TC-07); Wazuh deployment, DLS roles, approved-block sub-flow – Phase 4 |
 | 5.1 | Grafana NOC wall | `grafana/` – DSH-01/02/03 + CSAT/goal tiles; GLPI queries ✅ verified |
 | 5.3 | Monthly reports | not started |
 | – | Branding | `branding/` – placeholder tokens, GLPI CSS applied ✅; waiting for final design + logo |
 
 ## Version pins (NFR-OPS-03) – verified on Docker Hub, Nov 2026
 GLPI 11.0.13 · MariaDB 11.8.9 · Zabbix 8.0.0 (alpine) · PostgreSQL 17.12 · TimescaleDB 2.32.1-pg17 ·
-n8n 2.49.3 · Grafana 13.2.6 · Traefik v3.7.19 · nginx 1.30.7 · restic 0.19.1. GLPI Agent 1.18 (installer from GitHub releases).
+Integration service: .NET SDK 10.0.404 / ASP.NET Core runtime 10.0.15 · Grafana 13.2.6 · Traefik v3.7.19 · nginx 1.30.7 · restic 0.19.1. GLPI Agent 1.18 (installer from GitHub releases).

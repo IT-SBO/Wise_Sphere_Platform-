@@ -8,7 +8,7 @@ Where the brand shows up:
   GLPI 11 (client portal + staff UI)  custom CSS on the root entity, inherited by client entities   <- this script
   Grafana 13 OSS                      GF_BRANDING_APP_TITLE (hub/.env BRAND_NAME). Custom logos on the
                                       login page and menu are a Grafana Enterprise feature in OSS 13.
-  SMS / ticket texts                  brand name in n8n messages ("WiseSphere ...")
+  SMS / ticket texts                  brand name in integration-service messages ("WiseSphere ...")
   Monthly client report (RPT-01)      will read tokens.json when the report pack is built (WBS 5.3)
 """
 from __future__ import annotations

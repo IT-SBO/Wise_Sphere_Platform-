@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # One-shot lab bootstrap: GLPI (API, time zone, tenants, SLAs, service account),
-# Zabbix (media type, action, groups, lab hosts) and n8n (credentials, workflows).
+# Zabbix (media type, action, groups, lab hosts) and the C# integration service.
 # Idempotent - safe to run again. Requires: docker compose stack from lab/ running, python3 + requests + pyyaml.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -41,20 +41,17 @@ SQL glpi -e "UPDATE glpi_apiclients SET ipv4_range_start=INET_ATON('$GW'), ipv4_
 restore() { SQL glpi -e "UPDATE glpi_apiclients SET ipv4_range_start=INET_ATON('127.0.0.1'), ipv4_range_end=INET_ATON('127.0.0.1') WHERE id=1"; }
 trap restore EXIT
 python3 "$ROOT/glpi/provision_glpi.py" --url "$GLPI_URL" --admin-user glpi --admin-password "${GLPI_ADMIN_PASSWORD:-glpi}" \
-  --svc-password "$WS_GLPI_SVC_PASSWORD" --app-token "$WS_GLPI_APP_TOKEN" --api-cidr 172.30.0.0/24 --out glpi-ids.json >/dev/null
+  --svc-password "$WS_GLPI_SVC_PASSWORD" --app-token "$WS_GLPI_APP_TOKEN" --api-cidr 172.30.0.0/24 --svc-user svc-integration --out glpi-ids.json >/dev/null
 restore; trap - EXIT
 
 echo "== Zabbix: provisioning"
 wait_for 300 "Zabbix web" curl -sf -o /dev/null "http://localhost:${ZABBIX_PORT}/"
 python3 "$ROOT/zabbix/provision_zabbix.py" --url "$ZBX_URL" --user Admin --password "${ZABBIX_ADMIN_PASSWORD:-zabbix}" \
-  --webhook-url http://n8n:5678/webhook/zbx-event --webhook-secret "$WS_WEBHOOK_SECRET" \
+  --webhook-url http://ws-integration:8080/webhook/zbx-event --webhook-secret "$WS_WEBHOOK_SECRET" \
   --zabbix-public-url "http://localhost:${ZABBIX_PORT}" --lab >/dev/null
 
-echo "== n8n: settings, credentials, workflows"
-python3 "$ROOT/scripts/render_n8n_env.py" --ids glpi-ids.json --base n8n.env.base --out n8n.env
-docker compose up -d --force-recreate n8n >/dev/null
-wait_for 180 "n8n" docker exec ws-n8n wget -qO- http://localhost:5678/healthz
-"$ROOT/scripts/n8n_bootstrap.sh" ws-n8n
-docker restart ws-n8n >/dev/null
-wait_for 180 "n8n" docker exec ws-n8n wget -qO- http://localhost:5678/healthz
-echo "== lab ready: GLPI http://localhost:${GLPI_PORT}  Zabbix http://localhost:${ZABBIX_PORT}  n8n http://localhost:${N8N_PORT}"
+echo "== integration service (C# .NET): restart with the GLPI service account and ids"
+python3 "$ROOT/scripts/glpi_ids_env.py" glpi-ids.json .env >/dev/null
+docker compose up -d --force-recreate ws-integration >/dev/null
+wait_for 120 "integration service" curl -sf "http://localhost:${INTEGRATION_PORT}/readyz"
+echo "== lab ready: GLPI http://localhost:${GLPI_PORT}  Zabbix http://localhost:${ZABBIX_PORT}  integration http://localhost:${INTEGRATION_PORT}/readyz"

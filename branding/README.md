@@ -24,6 +24,6 @@ python3 branding/apply_branding.py --glpi-url http://localhost:8090/apirest.php 
 |---|---|---|
 | GLPI client portal + staff UI | Custom CSS on the root entity, inherited by every client entity | Script ready |
 | Grafana | `BRAND_NAME` → `GF_BRANDING_APP_TITLE`. Custom logo on login/menu needs Grafana Enterprise | Title only in OSS |
-| SMS and ticket texts | Brand name in n8n messages | Done ("WiseSphere …") |
+| SMS and ticket texts | Brand name in SMS and ticket texts from the integration service | Done ("WiseSphere …") |
 | Monthly client report (RPT-01) | Will read `tokens.json` + logo | When WBS 5.3 is built |
 | Custom web portal | **Not in Release 1** (PRD R-06, §4.4: GLPI + Grafana are the client portal) | Needs a scope decision if the design includes one |

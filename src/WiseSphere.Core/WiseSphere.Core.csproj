@@ -1,0 +1,3 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Pure domain logic: event contracts and decision rules. No I/O, no dependencies. -->
+</Project>

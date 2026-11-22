@@ -22,7 +22,7 @@ http:
           - "{{ trim $c }}"
 {{- end }}
 
-    # n8n webhooks: only the Zabbix server and the Wazuh manager (T-04)
+    # Integration webhooks: only the Zabbix server and the Wazuh manager (T-04)
     webhook-sources:
       ipAllowList:
         sourceRange:
