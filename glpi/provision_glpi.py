@@ -161,7 +161,10 @@ def provision(g: Glpi, tenants: dict, sla: dict, args) -> dict:
                         ids["sla"][f"{t['tier']}/{t['country']}/5/tto"], ids["sla"][f"{t['tier']}/{t['country']}/5/ttr"])
 
     ids["service_user"] = ensure_service_user(g, args) if args.svc_password else None
-    ids["api_client"] = ensure_api_client(g, args) if args.app_token else None
+    ids["api_client"] = ensure_api_client(g, args, "wisesphere-integration", args.app_token) if args.app_token else None
+    ids["portal_api_client"] = ensure_api_client(g, args, "wisesphere-portal", args.portal_app_token) if args.portal_app_token else None
+    if args.lab_users_password:
+        ids["lab_users"] = ensure_lab_users(g, args.lab_users_password, ids["entities"])
     return ids
 
 
@@ -202,18 +205,36 @@ def ensure_service_user(g: Glpi, args) -> dict:
     return {"id": uid, "name": args.svc_user, "profile": args.svc_profile}
 
 
-def ensure_api_client(g: Glpi, args) -> dict:
+def ensure_api_client(g: Glpi, args, name: str, token: str) -> dict:
     net = ipaddress.ip_network(args.api_cidr, strict=False)
-    values = {"name": "wisesphere-integration", "is_active": 1, "ipv4_range_start": str(net.network_address),
-              "ipv4_range_end": str(net.broadcast_address), "app_token": args.app_token, "dolog_method": 0,
+    values = {"name": name, "is_active": 1, "ipv4_range_start": str(net.network_address),
+              "ipv4_range_end": str(net.broadcast_address), "app_token": token, "dolog_method": 0,
               "entities_id": 0, "is_recursive": 1, "comment": "WiseSphere integration service (INT-05). Rotate via provision_glpi.py."}
-    found = g.find("APIClient", name="wisesphere-integration")
+    found = g.find("APIClient", name=name)
     if found:
         cid = int(found[0]["id"])
         g.call("PUT", f"/APIClient/{cid}", {"input": values})
     else:
         cid = int(g.call("POST", "/APIClient", {"input": values})["id"])
     return {"id": cid, "cidr": str(net)}
+
+
+def ensure_lab_users(g: Glpi, password: str, entities: dict) -> dict:
+    """LAB ONLY: a NOC operator (Technician on all clients) and a client user (Observer on CL001 only) for TC-10."""
+    def user(name: str, realname: str, profile: str, entity: int, recursive: int) -> int:
+        found = g.find("User", name=name)
+        uid = int(found[0]["id"]) if found else int(g.call("POST", "/User", {"input": {
+            "name": name, "realname": realname, "is_active": 1, "password": password, "password2": password}})["id"])
+        pid = int(g.find("Profile", name=profile)[0]["id"])
+        links = g.call("GET", f"/User/{uid}/Profile_User", params={"range": "0-50"}) or []
+        if not any(int(l["profiles_id"]) == pid and int(l["entities_id"]) == entity for l in links):
+            g.call("POST", "/Profile_User", {"input": {"users_id": uid, "profiles_id": pid, "entities_id": entity, "is_recursive": recursive}})
+        g.call("PUT", f"/User/{uid}", {"input": {"profiles_id": pid, "entities_id": entity}})
+        return uid
+    return {
+        "noc.operator": user("noc.operator", "NOC Operator", "Technician", 0, 1),
+        "client.cl001": user("client.cl001", "Pilot Client IT", "Observer", entities["CL001"], 0),
+    }
 
 
 def main() -> int:
@@ -231,6 +252,8 @@ def main() -> int:
                     help="GLPI profile for the integration service account (least privilege, INT-05)")
     ap.add_argument("--app-token", default=os.environ.get("WS_GLPI_APP_TOKEN"), help="app token for the integration service API client")
     ap.add_argument("--api-cidr", default=os.environ.get("WS_GLPI_API_CIDR", "127.0.0.1/32"), help="source range allowed for the integration service API client")
+    ap.add_argument("--portal-app-token", default=os.environ.get("WS_GLPI_PORTAL_APP_TOKEN"), help="app token for the portal API client")
+    ap.add_argument("--lab-users-password", default=None, help="LAB ONLY: create noc.operator and client.cl001 with this password")
     ap.add_argument("--out", help="write resulting ids (no secrets) to this JSON file")
     args = ap.parse_args()
     if not args.admin_password:

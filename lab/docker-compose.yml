@@ -152,6 +152,27 @@ services:
     ports: ["${INTEGRATION_PORT}:8080"]
     networks: [lab]
 
+  # ------------------------------------------------------------ WiseSphere portal (Angular + ASP.NET Core)
+  ws-portal:
+    <<: *restart
+    build:
+      context: ..
+      dockerfile: src/WiseSphere.Portal/Dockerfile
+    image: wisesphere/portal:dev
+    container_name: ws-portal
+    depends_on: [glpi]
+    environment:
+      TZ: ${TZ}
+      WS__Portal__GlpiTimeZone: ${TZ}
+      WS__Portal__GlpiPublicUrl: http://localhost:${GLPI_PORT}
+      WS__Portal__SecureCookies: "false"          # lab runs on plain http
+      WS__Glpi__ApiUrl: http://glpi/apirest.php
+      WS__Glpi__AppToken: ${WS_GLPI_PORTAL_APP_TOKEN:-}
+      WS__Zabbix__ApiUrl: http://zabbix-web:8080/api_jsonrpc.php
+      WS__Zabbix__ApiToken: ${ZABBIX_PORTAL_TOKEN:-}
+    ports: ["${PORTAL_PORT}:8080"]
+    networks: [lab]
+
   sms-mock:
     <<: *restart
     image: python:3.13-alpine

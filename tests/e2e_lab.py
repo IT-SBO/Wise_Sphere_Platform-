@@ -197,10 +197,56 @@ def main() -> int:
     if storm:
         sql(f"UPDATE glpi_tickets SET status=6 WHERE id={storm[0][0]}")  # close so later runs start clean
 
+    # ---- TC-10 portal: client isolation, CSRF, login (WiseSphere portal backend)
+    portal_checks()
+
     # ---- Zabbix action log
     failed = zsql(f"SELECT COUNT(*) FROM alerts WHERE status=2 AND alertid > {zbx_start}")[0][0]
     check("Zabbix action log has no failed alerts", failed == "0", f"failed={failed}")
     return summary()
+
+
+def portal_checks():
+    import http.cookiejar
+    base = f"http://localhost:{ENV['PORTAL_PORT']}"
+
+    def session(user, password):
+        jar = http.cookiejar.CookieJar()
+        op = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(jar))
+        req = urllib.request.Request(base + "/api/auth/login", data=json.dumps({"username": user, "password": password}).encode(),
+                                     method="POST", headers={"Content-Type": "application/json", "X-WS-Portal": "1"})
+        try:
+            return op, json.loads(op.open(req, timeout=30).read())
+        except urllib.error.HTTPError as e:
+            return None, {"status": e.code}
+
+    def get(op, path):
+        try:
+            with op.open(base + path, timeout=30) as r:
+                return r.status, json.loads(r.read())
+        except urllib.error.HTTPError as e:
+            return e.code, None
+
+    _, bad = session("client.cl001", "wrong-password")
+    check("TC-10 portal rejects a wrong password", bad.get("status") == 401, str(bad))
+    noc, me_noc = session("noc.operator", ENV["LAB_USERS_PASSWORD"])
+    cli, me_cli = session("client.cl001", ENV["LAB_USERS_PASSWORD"])
+    check("TC-10 staff vs client accounts", bool(noc and cli) and me_noc["isStaff"] and not me_cli["isStaff"],
+          f"noc staff={me_noc.get('isStaff')} client staff={me_cli.get('isStaff')}")
+    _, rows = get(cli, "/api/tickets?scope=all")
+    clients = sorted({r["client"] for r in rows or []})
+    check("TC-10 client sees only its own tickets", clients == ["CL001"], str(clients))
+    other = sql("SELECT t.id FROM glpi_tickets t JOIN glpi_entities e ON e.id=t.entities_id WHERE e.tag='CL000' LIMIT 1")
+    if other:
+        code_cli, _ = get(cli, f"/api/tickets/{other[0][0]}")
+        code_noc, _ = get(noc, f"/api/tickets/{other[0][0]}")
+        check("TC-10 client cannot open another client's ticket; staff can", code_cli == 404 and code_noc == 200, f"client={code_cli} staff={code_noc}")
+    req = urllib.request.Request(base + "/api/tickets/1/followups", data=b'{"text":"x"}', method="POST", headers={"Content-Type": "application/json"})
+    try:
+        code = noc.open(req, timeout=30).status
+    except urllib.error.HTTPError as e:
+        code = e.code
+    check("Portal refuses writes without the anti-CSRF header", code == 400, f"HTTP {code}")
 
 
 def summary() -> int:

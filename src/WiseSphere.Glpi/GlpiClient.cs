@@ -57,20 +57,48 @@ public sealed class GlpiClient : IAsyncDisposable
 
     private async Task<string> OpenSessionAsync(CancellationToken ct)
     {
+        var token = await InitSessionAsync(_o.User, _o.Password, ct);
+        // all client entities, recursively (tickets are searched across clients)
+        await SendRawAsync(token, HttpMethod.Post, "/changeActiveEntities", new { entities_id = 0, is_recursive = true }, ct);
+        _log.LogInformation("GLPI session opened");
+        return token;
+    }
+
+    private async Task<string> InitSessionAsync(string user, string password, CancellationToken ct)
+    {
         using var req = new HttpRequestMessage(HttpMethod.Get, $"{_o.ApiUrl}/initSession");
-        req.Headers.Authorization = new AuthenticationHeaderValue("Basic", Convert.ToBase64String(Encoding.UTF8.GetBytes($"{_o.User}:{_o.Password}")));
+        req.Headers.Authorization = new AuthenticationHeaderValue("Basic", Convert.ToBase64String(Encoding.UTF8.GetBytes($"{user}:{password}")));
         AddAppToken(req);
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         cts.CancelAfter(TimeSpan.FromSeconds(_o.TimeoutSeconds));
         using var res = await _http.SendAsync(req, cts.Token);
         var body = await res.Content.ReadAsStringAsync(ct);
         if (!res.IsSuccessStatusCode) throw new GlpiException($"GLPI initSession failed: HTTP {(int)res.StatusCode} {Trim(body)}", res.StatusCode);
-        var token = JsonDocument.Parse(body).RootElement.GetProperty("session_token").GetString()!;
-        // all client entities, recursively (tickets are searched across clients)
-        await SendRawAsync(token, HttpMethod.Post, "/changeActiveEntities", new { entities_id = 0, is_recursive = true }, ct);
-        _log.LogInformation("GLPI session opened");
-        return token;
+        return JsonDocument.Parse(body).RootElement.GetProperty("session_token").GetString()!;
     }
+
+    // ------------------------------------------------------------------ per-user sessions (portal)
+
+    /// <summary>Log a portal user in with their own GLPI account; GLPI then enforces their entity rights (TC-10).
+    /// Returns null when the credentials are wrong.</summary>
+    public async Task<string?> LoginUserAsync(string user, string password, CancellationToken ct)
+    {
+        try { return await InitSessionAsync(user, password, ct); }
+        catch (GlpiException e) when (e.Status is HttpStatusCode.Unauthorized or HttpStatusCode.BadRequest) { return null; }
+    }
+
+    /// <summary>Call the API with a user's session token (no pooling, no retry).</summary>
+    public Task<JsonElement?> UserRequestAsync(string sessionToken, HttpMethod method, string pathAndQuery, object? body, CancellationToken ct) =>
+        SendRawAsync(sessionToken, method, pathAndQuery, body, ct);
+
+    public async Task LogoutUserAsync(string sessionToken, CancellationToken ct)
+    {
+        try { await SendRawAsync(sessionToken, HttpMethod.Get, "/killSession", null, ct); }
+        catch (Exception e) when (e is GlpiException or HttpRequestException or TaskCanceledException) { /* session may already be gone */ }
+    }
+
+    /// <summary>Build a query string (keys and values escaped).</summary>
+    public static string Query(params (string Key, string Value)[] p) => Q(p);
 
     /// <summary>Run <paramref name="work"/> with a pooled session; on an invalid session, reopen once and retry.</summary>
     private async Task<T> WithSessionAsync<T>(Func<string, Task<T>> work, CancellationToken ct)

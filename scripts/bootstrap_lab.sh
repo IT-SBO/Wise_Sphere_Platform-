@@ -19,6 +19,9 @@ rnd() { head -c 48 /dev/urandom | base64 | tr -dc 'A-Za-z0-9' | head -c "${1:-40
 # Persist generated lab secrets in lab/.env once
 grep -q '^WS_GLPI_APP_TOKEN=' .env || echo "WS_GLPI_APP_TOKEN=$(rnd 40)" >> .env
 grep -q '^WS_GLPI_SVC_PASSWORD=' .env || echo "WS_GLPI_SVC_PASSWORD=Ws-$(rnd 24)-9" >> .env
+grep -q '^WS_GLPI_PORTAL_APP_TOKEN=' .env || echo "WS_GLPI_PORTAL_APP_TOKEN=$(rnd 40)" >> .env
+grep -q '^PORTAL_PORT=' .env || echo "PORTAL_PORT=8089" >> .env
+grep -q '^LAB_USERS_PASSWORD=' .env || echo "LAB_USERS_PASSWORD=Lab-$(rnd 16)-7" >> .env
 set -a; source .env; set +a
 
 echo "== waiting for GLPI install"
@@ -41,17 +44,25 @@ SQL glpi -e "UPDATE glpi_apiclients SET ipv4_range_start=INET_ATON('$GW'), ipv4_
 restore() { SQL glpi -e "UPDATE glpi_apiclients SET ipv4_range_start=INET_ATON('127.0.0.1'), ipv4_range_end=INET_ATON('127.0.0.1') WHERE id=1"; }
 trap restore EXIT
 python3 "$ROOT/glpi/provision_glpi.py" --url "$GLPI_URL" --admin-user glpi --admin-password "${GLPI_ADMIN_PASSWORD:-glpi}" \
-  --svc-password "$WS_GLPI_SVC_PASSWORD" --app-token "$WS_GLPI_APP_TOKEN" --api-cidr 172.30.0.0/24 --svc-user svc-integration --out glpi-ids.json >/dev/null
+  --svc-password "$WS_GLPI_SVC_PASSWORD" --app-token "$WS_GLPI_APP_TOKEN" --api-cidr 172.30.0.0/24 --svc-user svc-integration \
+  --portal-app-token "$WS_GLPI_PORTAL_APP_TOKEN" --lab-users-password "$LAB_USERS_PASSWORD" --out glpi-ids.json >/dev/null
 restore; trap - EXIT
 
 echo "== Zabbix: provisioning"
 wait_for 300 "Zabbix web" curl -sf -o /dev/null "http://localhost:${ZABBIX_PORT}/"
 python3 "$ROOT/zabbix/provision_zabbix.py" --url "$ZBX_URL" --user Admin --password "${ZABBIX_ADMIN_PASSWORD:-zabbix}" \
   --webhook-url http://ws-integration:8080/webhook/zbx-event --webhook-secret "$WS_WEBHOOK_SECRET" \
-  --zabbix-public-url "http://localhost:${ZABBIX_PORT}" --lab >/dev/null
+  --zabbix-public-url "http://localhost:${ZABBIX_PORT}" --lab --readonly-token-out .zabbix-portal-token >/dev/null
+sed -i '/^ZABBIX_PORTAL_TOKEN=/d' .env && echo "ZABBIX_PORTAL_TOKEN=$(cat .zabbix-portal-token)" >> .env && rm -f .zabbix-portal-token
 
 echo "== integration service (C# .NET): restart with the GLPI service account and ids"
 python3 "$ROOT/scripts/glpi_ids_env.py" glpi-ids.json .env >/dev/null
 docker compose up -d --force-recreate ws-integration >/dev/null
 wait_for 120 "integration service" curl -sf "http://localhost:${INTEGRATION_PORT}/readyz"
+
+echo "== portal (Angular + ASP.NET Core)"
+set -a; source .env; set +a
+docker compose up -d --force-recreate ws-portal >/dev/null
+wait_for 120 "portal" curl -sf "http://localhost:${PORTAL_PORT}/healthz"
+echo "== portal: http://localhost:${PORTAL_PORT}  users: noc.operator / client.cl001, password LAB_USERS_PASSWORD in lab/.env"
 echo "== lab ready: GLPI http://localhost:${GLPI_PORT}  Zabbix http://localhost:${ZABBIX_PORT}  integration http://localhost:${INTEGRATION_PORT}/readyz"

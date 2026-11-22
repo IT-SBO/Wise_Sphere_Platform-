@@ -19,3 +19,6 @@ bin/
 obj/
 *.user
 TestResults/
+web/portal/node_modules/
+web/portal/dist/
+web/portal/.angular/

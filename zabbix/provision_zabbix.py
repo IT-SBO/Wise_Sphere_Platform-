@@ -52,6 +52,11 @@ PARAMS = [
 ]
 
 
+# Read-only API methods for the portal and Grafana (role "WS API read-only")
+READONLY_API_METHODS = ["hostgroup.get", "host.get", "problem.get", "event.get", "trigger.get", "item.get",
+                        "history.get", "trend.get", "service.get", "sla.get", "sla.getsli", "proxy.get"]
+
+
 class Zbx:
     def __init__(self, url: str, user: str, password: str):
         self.url, self.n = url, 0
@@ -128,6 +133,38 @@ def ensure_notify_user(z: Zbx, mediatype_id: str, group_ids: list[str]) -> str:
     })["userids"][0]
 
 
+def ensure_readonly_token(z: Zbx, group_ids: list[str], username: str, token_name: str) -> str:
+    """Read-only API user + token (portal, Grafana). Regenerates the token on every run - store it in the vault."""
+    rights = [{"id": g, "permission": 2} for g in group_ids]
+    ug = z.call("usergroup.get", {"filter": {"name": ["WS Read-only API"]}, "output": ["usrgrpid"]})
+    if ug:
+        ugid = ug[0]["usrgrpid"]
+        z.call("usergroup.update", {"usrgrpid": ugid, "hostgroup_rights": rights})
+    else:
+        ugid = z.call("usergroup.create", {"name": "WS Read-only API", "gui_access": 3, "hostgroup_rights": rights})["usrgrpids"][0]
+    # Zabbix 8.0's default "User role" has API access off: use a dedicated role allowing read methods only
+    rules = {"api.access": 1, "api.mode": 1, "api": READONLY_API_METHODS, "ui.default_access": 0, "modules.default_access": 0,
+             "actions.default_access": 0}
+    role = z.call("role.get", {"filter": {"name": ["WS API read-only"]}, "output": ["roleid"]})
+    if role:
+        roleid = role[0]["roleid"]
+        z.call("role.update", {"roleid": roleid, "rules": rules})
+    else:
+        roleid = z.call("role.create", {"name": "WS API read-only", "type": 1, "rules": rules})["roleids"][0]
+    u = z.call("user.get", {"filter": {"username": [username]}, "output": ["userid"]})
+    if u:
+        uid = u[0]["userid"]
+        z.call("user.update", {"userid": uid, "roleid": roleid, "usrgrps": [{"usrgrpid": ugid}]})
+    else:
+        uid = z.call("user.create", {"username": username, "passwd": secrets.token_urlsafe(24) + "Aa1!",
+                                     "roleid": roleid, "usrgrps": [{"usrgrpid": ugid}]})["userids"][0]
+    old = z.call("token.get", {"userids": [uid], "filter": {"name": token_name}, "output": ["tokenid"]})
+    if old:
+        z.call("token.delete", [t["tokenid"] for t in old])
+    tid = z.call("token.create", {"name": token_name, "userid": uid})["tokenids"][0]
+    return z.call("token.generate", [tid])[0]["token"]
+
+
 def ensure_action(z: Zbx, mediatype_id: str, user_id: str) -> str:
     body = {
         "name": ACTION_NAME, "eventsource": 0, "status": 0, "esc_period": "1h",
@@ -195,6 +232,7 @@ def main() -> int:
     ap.add_argument("--zabbix-public-url", default=os.environ.get("WS_ZABBIX_PUBLIC_URL", "http://localhost:8081"))
     ap.add_argument("--tenants", default=str(ROOT / "config/tenants.yaml"))
     ap.add_argument("--lab", action="store_true", help="also create lab test hosts")
+    ap.add_argument("--readonly-token-out", help="create a read-only API token (portal/Grafana) and write it to this file (mode 600)")
     args = ap.parse_args()
     if not args.password or not args.webhook_secret:
         ap.error("--password and --webhook-secret are required (or ZABBIX_ADMIN_PASSWORD / WS_WEBHOOK_SECRET)")
@@ -216,6 +254,11 @@ def main() -> int:
     out = {"groups": groups, "mediatype": mt, "notify_user": uid, "action": act}
     if args.lab:
         out["lab"] = ensure_lab(z, groups)
+    if args.readonly_token_out:
+        token = ensure_readonly_token(z, [g for n, g in groups.items() if n.startswith("CL")], "svc-ws-readonly", "wisesphere-portal")
+        Path(args.readonly_token_out).write_text(token + "\n")
+        os.chmod(args.readonly_token_out, 0o600)
+        out["readonly_token"] = args.readonly_token_out
     print(out)
     return 0
 
