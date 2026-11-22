@@ -1,11 +1,13 @@
 # WiseSphere Platform
 
 Managed services (MSP / MSSP) platform for WISE Group – built from GLPI 11, Zabbix 8.0 LTS, Wazuh 4.14 and
-Grafana 13 in a hub-and-spoke design, connected by a WiseSphere integration service written in **C# / .NET 10**, as specified in **WS-PRD-001 v2.0**.
+Grafana 13 in a hub-and-spoke design, connected by a WiseSphere integration service written in **C# / .NET 10**, with a WiseSphere portal in **Angular 22 + ASP.NET Core**, as specified in **WS-PRD-001 v2.0**.
 
 The PoC proved the core loop (device down → ticket, no human). This repository turns that into the
 Release-1 platform: multi-client, deduplicated, storm-safe, SLA-aware, secured, and repeatable from Git.
 
+> **Development document:** [`docs/WiseSphere_Development_Document.docx`](docs/WiseSphere_Development_Document.docx) – architecture, code, APIs, set-up, testing, security and the development guide.
+>
 > Design and logo: everything visual lives in [`branding/`](branding/README.md). Current colours are placeholders;
 > drop in the final files and run one command.
 
@@ -14,7 +16,8 @@ Release-1 platform: multi-client, deduplicated, storm-safe, SLA-aware, secured, 
 | Folder | Contents |
 |---|---|
 | `config/` | `tenants.yaml` (client codes CLnnn, tier, country, sites) and `sla.yaml` (SLA matrix per package) – the single source of truth |
-| `src/` | C# / .NET 10: `WiseSphere.Core` (event contracts + decision rules), `WiseSphere.Glpi` (GLPI API client), `WiseSphere.Integration` (webhooks, SLA watch, CSAT review, SMS) |
+| `src/` | C# / .NET 10: `WiseSphere.Core` (event contracts + decision rules), `WiseSphere.Glpi` (GLPI API client), `WiseSphere.Integration` (webhooks, SLA watch, CSAT review, SMS), `WiseSphere.Portal` (portal back end) |
+| `web/portal/` | Angular 22 portal front end (English / Arabic, brand tokens) |
 | `tests/` | xUnit tests (`WiseSphere.Core.Tests`), Python tooling tests, end-to-end lab suite, TC-09 load test |
 | `glpi/` | `provision_glpi.py` – entities, SLAs, calendars, rules, survey, groups, service account, API client |
 | `zabbix/` | `provision_zabbix.py` – media type, action, host groups, notify user; webhook script |
@@ -52,6 +55,7 @@ make lab-test
 |---|---|---|
 | GLPI | http://localhost:8090 | glpi / glpi (lab only) |
 | Zabbix | http://localhost:8081 | Admin / zabbix (lab only) |
+| **WiseSphere portal** | http://localhost:8089 | `noc.operator` (staff) or `client.cl001` (client); password `LAB_USERS_PASSWORD` in `lab/.env` |
 | Integration service | http://localhost:8088/readyz, `/metrics` | – (webhooks need the `X-WS-Secret` header) |
 | SMS mock | http://localhost:8099/messages | – |
 | Grafana | http://localhost:3000 | `docker compose --profile grafana up -d grafana` in `lab/`, admin / see `lab/.env` |
@@ -67,6 +71,7 @@ make lab-test
 | TC-06 ticket 10 min from breach → "AT RISK" SMS | ✅ |
 | TC-07 Wazuh level 10 → SOC ticket, level 12 → SMS, repeat deduped | ✅ |
 | Wrong webhook secret → 403, bad payload → 400 | ✅ |
+| TC-10 portal: client sees only its own tickets, CSRF and login checks | ✅ |
 | TC-09 500 alerts (`make lab-load-test`) | ✅ 20 s, none lost, p95 0.49 s (target: 10 min, p95 ≤ 60 s) |
 
 The PoC test also runs on the platform: `make lab-poc-test` stops the agent container (ticket after ~5 min, priority from Zabbix severity, client SLA) and starts it again (ticket solved automatically in ~1 min).
