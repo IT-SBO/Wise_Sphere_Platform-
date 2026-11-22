@@ -25,7 +25,8 @@ Release-1 platform: multi-client, deduplicated, storm-safe, SLA-aware, secured, 
 | `ops/` | Backups (restic, off-site), WireGuard hub setup, restore drill |
 | `scripts/` | Lab bootstrap, n8n bootstrap, `new_spoke.py` (onboard a site) |
 | `tests/` | Unit tests and the end-to-end lab test suite (PRD §6.5) |
-| `docs/` | [Architecture & build status](docs/architecture.md), execution plan, launch plan |
+| `docs/` | [Architecture & build status](docs/architecture.md), PRD, execution plan, launch plan |
+| `poc/` | The original PoC (compose, workflow, PDFs, screenshots) and [what the platform changes](poc/README.md) |
 
 ## Try it: the lab (about 5 minutes)
 
@@ -67,7 +68,7 @@ make lab-test
 | TC-07 Wazuh level 10 → SOC ticket, level 12 → SMS, repeat deduped | ✅ |
 | Wrong webhook secret → 403, bad payload → 400 | ✅ |
 
-The PoC test also still works: `docker stop ws-lab-device-01` → after Zabbix's 3-minute agent timeout a ticket opens.
+The PoC test also runs on the platform: `make lab-poc-test` stops the agent container (ticket after ~5 min, priority from Zabbix severity, client SLA) and starts it again (ticket solved automatically in ~1 min).
 
 ## Differences from the PoC
 

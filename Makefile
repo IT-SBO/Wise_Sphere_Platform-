@@ -2,7 +2,7 @@
 SHELL := /bin/bash
 PY ?= python3
 
-.PHONY: help test unit workflows check lab-env lab-up lab-bootstrap lab-test lab-down lab-reset lab-logs hub-config brand
+.PHONY: help test unit workflows check lab-env lab-up lab-bootstrap lab-test lab-down lab-reset lab-logs hub-config brand lab-poc-test
 
 help:
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-15s %s\n", $$1, $$2}'
@@ -35,6 +35,9 @@ lab-bootstrap: ## Provision GLPI, Zabbix and n8n in the lab (idempotent)
 
 lab-test: ## End-to-end tests TC-01..TC-07 against the lab
 	$(PY) tests/e2e_lab.py
+
+lab-poc-test: ## The PoC test: stop the agent container -> ticket, start it -> solved (~6 min)
+	tests/poc_agent_down.sh
 
 lab-logs: ## Follow n8n logs
 	docker logs -f ws-n8n

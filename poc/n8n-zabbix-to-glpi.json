@@ -1,0 +1,142 @@
+{
+  "name": "Zabbix to GLPI Ticket",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "zabbix-alert",
+        "options": {}
+      },
+      "id": "11111111-1111-4111-8111-111111111111",
+      "name": "Zabbix Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [-200, 0],
+      "webhookId": "11111111-1111-4111-8111-111111111111"
+    },
+    {
+      "parameters": {
+        "url": "http://glpi/apirest.php/initSession",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Authorization",
+              "value": "user_token PUT_USER_TOKEN_HERE"
+            },
+            {
+              "name": "App-Token",
+              "value": "PUT_APP_TOKEN_HERE"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "22222222-2222-4222-8222-222222222222",
+      "name": "GLPI initSession",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [20, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://glpi/apirest.php/Ticket",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Session-Token",
+              "value": "={{ $json.session_token }}"
+            },
+            {
+              "name": "App-Token",
+              "value": "PUT_APP_TOKEN_HERE"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ input: { name: '[Zabbix] ' + $('Zabbix Webhook').item.json.body.subject, content: 'Host: ' + $('Zabbix Webhook').item.json.body.host + '\\nSeverity: ' + $('Zabbix Webhook').item.json.body.severity + '\\nEvent ID: ' + $('Zabbix Webhook').item.json.body.eventid + '\\nOpened automatically by n8n from a Zabbix alert.', type: 1, urgency: 4, impact: 4, priority: 4, status: 1 } }) }}",
+        "options": {}
+      },
+      "id": "33333333-3333-4333-8333-333333333333",
+      "name": "Create GLPI Ticket",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [240, 0]
+    },
+    {
+      "parameters": {
+        "url": "http://glpi/apirest.php/killSession",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Session-Token",
+              "value": "={{ $('GLPI initSession').item.json.session_token }}"
+            },
+            {
+              "name": "App-Token",
+              "value": "PUT_APP_TOKEN_HERE"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "44444444-4444-4444-8444-444444444444",
+      "name": "GLPI killSession",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [460, 0]
+    }
+  ],
+  "connections": {
+    "Zabbix Webhook": {
+      "main": [
+        [
+          {
+            "node": "GLPI initSession",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GLPI initSession": {
+      "main": [
+        [
+          {
+            "node": "Create GLPI Ticket",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create GLPI Ticket": {
+      "main": [
+        [
+          {
+            "node": "GLPI killSession",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {}
+}
