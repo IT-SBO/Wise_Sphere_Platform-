@@ -1,0 +1,414 @@
+{
+  "id": "wsWF03CsatReview",
+  "name": "WF-03 CSAT Review",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "10 8 * * *"
+            }
+          ]
+        }
+      },
+      "id": "ca98f012-0688-53a1-9145-51a1e794ed80",
+      "name": "Daily 08:10",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.WS_GLPI_API_URL }}/initSession",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 20000
+        }
+      },
+      "id": "eec8bec3-2833-5fe6-8ab9-8457143ae1c9",
+      "name": "GLPI initSession",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        220,
+        300
+      ],
+      "credentials": {
+        "httpCustomAuth": {
+          "id": "wsGlpiApiCred001",
+          "name": "WS GLPI API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.WS_GLPI_API_URL }}/changeActiveEntities",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Session-Token",
+              "value": "={{ $('GLPI initSession').first().json.session_token }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 20000
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\"entities_id\": 0, \"is_recursive\": true}"
+      },
+      "id": "ccde7a70-7bda-53f8-ae91-7302ed62ba6c",
+      "name": "GLPI Root Scope",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        440,
+        300
+      ],
+      "credentials": {
+        "httpCustomAuth": {
+          "id": "wsGlpiApiCred001",
+          "name": "WS GLPI API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.WS_GLPI_API_URL }}/TicketSatisfaction",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Session-Token",
+              "value": "={{ $('GLPI initSession').first().json.session_token }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 20000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
+        },
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "range",
+              "value": "0-500"
+            },
+            {
+              "name": "sort",
+              "value": "id"
+            },
+            {
+              "name": "order",
+              "value": "DESC"
+            }
+          ]
+        }
+      },
+      "id": "9be3d916-7671-5e95-9590-f5e997e81d5e",
+      "name": "Get Surveys",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        660,
+        300
+      ],
+      "credentials": {
+        "httpCustomAuth": {
+          "id": "wsGlpiApiCred001",
+          "name": "WS GLPI API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "/*\n * WiseSphere integration library (shared by the n8n Code nodes).\n *\n * n8n Code nodes cannot `require` project files, so n8n/build/build-workflows.mjs\n * inlines this file at the top of every Code node. Keep it dependency-free,\n * synchronous and side-effect free: every function takes data in and returns\n * a decision out. All HTTP calls are done by n8n HTTP Request nodes.\n *\n * Unit tests: n8n/test/*.test.mjs  (node --test)\n */\n\nconst WS = (() => {\n  const TICKET_STATUS = { NEW: 1, ASSIGNED: 2, PLANNED: 3, WAITING: 4, SOLVED: 5, CLOSED: 6 };\n  const ZBX_SEVERITY_LABEL = ['Not classified', 'Information', 'Warning', 'Average', 'High', 'Disaster'];\n\n  /** Trim a value and drop unresolved Zabbix macros such as \"{EVENT.TAGS.client}\" or \"*UNKNOWN*\". */\n  function clean(v) {\n    if (v === undefined || v === null) return '';\n    const s = String(v).trim();\n    if (s === '*UNKNOWN*') return '';\n    if (/^\\{[A-Z0-9_.$#]+(\\.[^}]*)?\\}$/.test(s)) return '';\n    return s;\n  }\n\n  /** Parse Zabbix {EVENT.TAGSJSON} ([{tag, value}]) into a plain object; tolerant of bad input. */\n  function parseTags(raw) {\n    const out = {};\n    if (!raw) return out;\n    let arr = raw;\n    if (typeof raw === 'string') {\n      const s = clean(raw);\n      if (!s) return out;\n      try { arr = JSON.parse(s); } catch (e) { return out; }\n    }\n    if (!Array.isArray(arr)) return out;\n    for (const t of arr) {\n      if (t && typeof t.tag === 'string' && !(t.tag in out)) out[t.tag] = String(t.value ?? '');\n    }\n    return out;\n  }\n\n  function escapeHtml(s) {\n    return String(s ?? '')\n      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')\n      .replace(/\"/g, '&quot;').replace(/'/g, '&#39;');\n  }\n\n  /** GLPI rich-text content from [label, value] rows. */\n  function htmlRows(title, rows, footer) {\n    const body = rows\n      .filter(([, v]) => v !== undefined && v !== null && String(v) !== '')\n      .map(([k, v]) => `<b>${escapeHtml(k)}:</b> ${escapeHtml(v)}`)\n      .join('<br>');\n    return `<p>${escapeHtml(title)}</p><p>${body}</p>` + (footer ? `<p><i>${escapeHtml(footer)}</i></p>` : '');\n  }\n\n  function truncate(s, n) {\n    s = String(s ?? '');\n    return s.length > n ? s.slice(0, n - 1) + '…' : s;\n  }\n\n  /** INT-01 mapping: Zabbix severity -> GLPI urgency/impact (priority is computed by GLPI's matrix). */\n  function zbxSeverityToGlpi(sev) {\n    const n = Number(sev);\n    if (n >= 5) return { urgency: 5, impact: 5 };\n    if (n === 4) return { urgency: 4, impact: 4 };\n    if (n === 3) return { urgency: 3, impact: 3 };\n    return { urgency: 2, impact: 2 };\n  }\n\n  /** INT-02 mapping: Wazuh rule level -> GLPI urgency/impact. */\n  function wazuhLevelToGlpi(level) {\n    const n = Number(level);\n    if (n >= 13) return { urgency: 5, impact: 5 };\n    if (n === 12) return { urgency: 4, impact: 4 };\n    if (n >= 10) return { urgency: 4, impact: 3 };\n    return { urgency: 3, impact: 2 };\n  }\n\n  /** Same matrix as GLPI's default priority matrix (used for SMS wording and tier rules). */\n  function glpiPriority(urgency, impact) {\n    const m = {\n      5: [0, 3, 4, 4, 5, 5], 4: [0, 2, 3, 4, 4, 5], 3: [0, 2, 3, 3, 4, 4],\n      2: [0, 1, 2, 2, 3, 3], 1: [0, 1, 1, 2, 2, 2],\n    };\n    return (m[urgency] || m[3])[impact] || 3;\n  }\n\n  const zbxKey = (eventId) => `[ZBX:${eventId}]`;\n  const stormKey = (client) => `[STORM:${client || 'UNMAPPED'}]`;\n  const wzhKey = (agentId, ruleId) => `[WZH:${agentId}:${ruleId}]`;\n\n  // ---------------------------------------------------------------- Zabbix\n\n  /** Validate and normalise a ws.event.v1 webhook body. */\n  function normalizeZabbixEvent(body) {\n    const errors = [];\n    if (!body || typeof body !== 'object') return { valid: false, errors: ['body is not a JSON object'], event: null };\n    const tags = parseTags(body.tags);\n\n    let status = clean(body.status).toUpperCase();\n    if (!status && clean(body.event_value) !== '') status = clean(body.event_value) === '0' ? 'RESOLVED' : 'PROBLEM';\n    if (status === 'OK' || status === 'RECOVERY') status = 'RESOLVED';\n    if (clean(body.event_update) === '1' && status === 'PROBLEM') status = 'UPDATE';\n\n    const event = {\n      schema: 'ws.event.v1',\n      event_id: clean(body.event_id ?? body.eventid),\n      status,\n      severity: clean(body.severity),\n      event_name: clean(body.event_name ?? body.subject),\n      host: clean(body.host),\n      host_name: clean(body.host_name) || clean(body.host),\n      host_ip: clean(body.host_ip),\n      client_code: (clean(body.client_code) || clean(tags.client)).toUpperCase(),\n      site_code: (clean(body.site_code) || clean(tags.site)).toUpperCase(),\n      glpi_asset: clean(body.glpi_asset) || clean(tags.glpi_asset),\n      event_time: clean(body.event_time),\n      opdata: clean(body.opdata),\n      trigger_id: clean(body.trigger_id),\n      event_url: clean(body.event_url),\n      update_message: clean(body.update_message),\n      update_user: clean(body.update_user),\n    };\n\n    // Severity may arrive as a label from older media types.\n    if (!/^[0-5]$/.test(event.severity)) {\n      const idx = ZBX_SEVERITY_LABEL.findIndex((l) => l.toLowerCase() === event.severity.toLowerCase());\n      event.severity = idx >= 0 ? String(idx) : '';\n    }\n\n    if (!/^[0-9]+$/.test(event.event_id)) errors.push('event_id must be numeric');\n    if (!['PROBLEM', 'RESOLVED', 'UPDATE'].includes(event.status)) errors.push('status must be PROBLEM, RESOLVED or UPDATE');\n    if (event.status === 'PROBLEM' && event.severity === '') errors.push('severity must be 0-5');\n    if (!event.event_name) errors.push('event_name is required');\n    if (!event.host) errors.push('host is required');\n    if (event.client_code && !/^CL[0-9]{3}$/.test(event.client_code)) errors.push('client_code must look like CL001');\n    if (event.glpi_asset && !/^[A-Za-z]+:[0-9]+$/.test(event.glpi_asset)) event.glpi_asset = '';\n\n    return { valid: errors.length === 0, errors, event };\n  }\n\n  function zbxTicketName(ev) {\n    return truncate(`${zbxKey(ev.event_id)} ${ev.host_name}: ${ev.event_name}`, 250);\n  }\n\n  function zbxDetails(ev) {\n    return [\n      ['Client', ev.client_code || 'UNMAPPED'],\n      ['Site', ev.site_code],\n      ['Host', ev.host_name !== ev.host ? `${ev.host_name} (${ev.host})` : ev.host],\n      ['IP', ev.host_ip],\n      ['Problem', ev.event_name],\n      ['Severity', ZBX_SEVERITY_LABEL[Number(ev.severity)] || ev.severity],\n      ['Operational data', ev.opdata],\n      ['Event time', ev.event_time],\n      ['Zabbix event ID', ev.event_id],\n      ['Zabbix link', ev.event_url],\n    ];\n  }\n\n  /** Pick the ticket whose name carries exactly this key (GLPI LIKE search can over-match). */\n  function findByKey(tickets, key, { openOnly = false } = {}) {\n    const list = (Array.isArray(tickets) ? tickets : [])\n      .filter((t) => t && typeof t.name === 'string' && t.name.startsWith(key))\n      .filter((t) => !openOnly || Number(t.status) < TICKET_STATUS.SOLVED)\n      .sort((a, b) => Number(b.id) - Number(a.id));\n    return list[0] || null;\n  }\n\n  /**\n   * Decide what WF-01 must write to GLPI for one Zabbix event.\n   *\n   * ctx = {\n   *   event,                 // normalised ws.event.v1\n   *   entityId,              // GLPI entity of the client (null if unknown)\n   *   eventTickets,          // GLPI tickets whose name contains [ZBX:<id>]\n   *   stormTickets,          // GLPI tickets whose name contains [STORM:<client>]\n   *   recentCount,           // monitoring tickets opened for this entity in the storm window\n   *   cfg: { defaultEntityId, stormThreshold, requestTypeId, nocGroupId, solutionTypeId }\n   * }\n   * Returns { action, ops: [{ path, body }], notify: null | { channel, message }, summary }\n   */\n  function decideZabbix(ctx) {\n    const { event: ev, cfg = {} } = ctx;\n    const threshold = Number(cfg.stormThreshold ?? 10);\n    const mapped = ctx.entityId !== null && ctx.entityId !== undefined;\n    const entityId = mapped ? Number(ctx.entityId) : Number(cfg.defaultEntityId ?? 0);\n    const existing = findByKey(ctx.eventTickets, zbxKey(ev.event_id));\n    const openStorm = findByKey(ctx.stormTickets, stormKey(ev.client_code), { openOnly: true });\n    const footer = 'Opened automatically by WiseSphere (Zabbix → n8n → GLPI).';\n    const summary = { event_id: ev.event_id, status: ev.status, client_code: ev.client_code || null, entity_id: entityId, mapped };\n\n    const followup = (ticketId, title, extraRows = []) => ({\n      path: '/ITILFollowup',\n      body: { input: { itemtype: 'Ticket', items_id: Number(ticketId), is_private: 0, requesttypes_id: cfg.requestTypeId || undefined,\n        content: htmlRows(title, [...zbxDetails(ev), ...extraRows]) } },\n    });\n\n    if (ev.status === 'PROBLEM') {\n      if (existing) {\n        return { action: 'followup', ops: [followup(existing.id, 'Repeat notification from Zabbix for the same event.')], notify: null,\n          summary: { ...summary, action: 'followup', ticket_id: Number(existing.id) } };\n      }\n      const recent = Number(ctx.recentCount || 0);\n      if (mapped && recent >= threshold) {\n        if (openStorm) {\n          return { action: 'storm_followup', ops: [followup(openStorm.id, `${zbxKey(ev.event_id)} Additional problem during alert storm.`)], notify: null,\n            summary: { ...summary, action: 'storm_followup', ticket_id: Number(openStorm.id) } };\n        }\n        const name = truncate(`${stormKey(ev.client_code)} Alert storm – ${ev.client_code}: more than ${threshold} problems in 5 minutes`, 250);\n        const input = {\n          name, entities_id: entityId, type: 1, urgency: 5, impact: 4, status: TICKET_STATUS.NEW,\n          requesttypes_id: cfg.requestTypeId || undefined,\n          _groups_id_assign: cfg.nocGroupId || undefined,\n          content: htmlRows(`Alert storm detected for ${ev.client_code}. Further problems are added to this ticket as follow-ups.`,\n            [['First grouped event', zbxKey(ev.event_id)], ...zbxDetails(ev)], footer),\n        };\n        return {\n          action: 'storm_create', ops: [{ path: '/Ticket', body: { input: clean_(input) } }],\n          notify: { channel: 'noc', message: `WiseSphere STORM ${ev.client_code}: >${threshold} problems in 5 min. Latest: ${truncate(ev.host_name + ' ' + ev.event_name, 80)}` },\n          summary: { ...summary, action: 'storm_create' },\n        };\n      }\n      const sev = zbxSeverityToGlpi(ev.severity);\n      const input = {\n        name: zbxTicketName(ev), entities_id: entityId, type: 1, status: TICKET_STATUS.NEW, ...sev,\n        requesttypes_id: cfg.requestTypeId || undefined,\n        _groups_id_assign: cfg.nocGroupId || undefined,\n        content: htmlRows(mapped ? 'Monitoring alert raised by Zabbix.' : 'Monitoring alert raised by Zabbix for an UNMAPPED host (no client tag). Fix the host tags.',\n          zbxDetails(ev), footer),\n      };\n      if (ev.glpi_asset) {\n        const [itemtype, id] = ev.glpi_asset.split(':');\n        input.items_id = { [itemtype]: [Number(id)] };\n      }\n      const notify = Number(ev.severity) >= 5\n        ? { channel: 'noc', message: `WiseSphere P1 ${ev.client_code || 'UNMAPPED'}: ${truncate(ev.host_name + ' – ' + ev.event_name, 110)}` }\n        : null;\n      return { action: 'create', ops: [{ path: '/Ticket', body: { input: clean_(input) } }], notify, summary: { ...summary, action: 'create' } };\n    }\n\n    if (ev.status === 'RESOLVED') {\n      if (existing && Number(existing.status) < TICKET_STATUS.SOLVED) {\n        return {\n          action: 'solve',\n          ops: [{ path: '/ITILSolution', body: { input: clean_({ itemtype: 'Ticket', items_id: Number(existing.id), solutiontypes_id: cfg.solutionTypeId || undefined,\n            content: htmlRows('Problem resolved – Zabbix reported recovery. Engineer to confirm closure.', zbxDetails(ev)) }) } }],\n          notify: null, summary: { ...summary, action: 'solve', ticket_id: Number(existing.id) },\n        };\n      }\n      if (!existing && openStorm) {\n        return { action: 'storm_followup', ops: [followup(openStorm.id, `${zbxKey(ev.event_id)} Recovered.`)], notify: null,\n          summary: { ...summary, action: 'storm_followup', ticket_id: Number(openStorm.id) } };\n      }\n      return { action: 'noop', ops: [], notify: null, summary: { ...summary, action: 'noop', reason: existing ? 'ticket already solved/closed' : 'no ticket for event' } };\n    }\n\n    // UPDATE: acknowledgement / comment made in Zabbix\n    if (existing) {\n      const rows = [['Updated by', ev.update_user], ['Message', ev.update_message]];\n      return { action: 'followup', ops: [followup(existing.id, 'Event updated in Zabbix.', rows)], notify: null,\n        summary: { ...summary, action: 'followup', ticket_id: Number(existing.id) } };\n    }\n    return { action: 'noop', ops: [], notify: null, summary: { ...summary, action: 'noop', reason: 'no ticket for event' } };\n  }\n\n  // ---------------------------------------------------------------- Wazuh\n\n  function normalizeWazuhAlert(body) {\n    const errors = [];\n    if (!body || typeof body !== 'object') return { valid: false, errors: ['body is not a JSON object'], alert: null };\n    const rule = body.rule || {};\n    const agent = body.agent || {};\n    const labels = agent.labels || {};\n    const alert = {\n      schema: 'ws.secevent.v1',\n      alert_id: clean(body.alert_id ?? body.id),\n      timestamp: clean(body.timestamp),\n      rule_id: clean(rule.id),\n      level: Number(rule.level),\n      description: clean(rule.description),\n      groups: Array.isArray(rule.groups) ? rule.groups.map(String) : [],\n      mitre: rule.mitre && typeof rule.mitre === 'object' ? rule.mitre : {},\n      agent_id: clean(agent.id),\n      agent_name: clean(agent.name),\n      agent_ip: clean(agent.ip),\n      client_code: clean(labels.client).toUpperCase(),\n      site_code: clean(labels.site).toUpperCase(),\n      srcip: clean(body.srcip ?? (body.data && body.data.srcip)),\n      full_log: truncate(clean(body.full_log), 2000),\n    };\n    if (!alert.rule_id) errors.push('rule.id is required');\n    if (!Number.isFinite(alert.level)) errors.push('rule.level must be a number');\n    if (!alert.agent_id) errors.push('agent.id is required');\n    if (!alert.description) errors.push('rule.description is required');\n    if (alert.client_code && !/^CL[0-9]{3}$/.test(alert.client_code)) errors.push('agent.labels.client must look like CL001');\n    return { valid: errors.length === 0, errors, alert };\n  }\n\n  /**\n   * WF-02 decision. ctx = { alert, entityId, alertTickets, cfg: { defaultEntityId, requestTypeId, socGroupId, ticketLevel, pageLevel } }\n   * Open ticket with the same [WZH:agent:rule] key -> follow-up (dedupe); else create. Level >= pageLevel -> SMS SOC.\n   */\n  function decideWazuh(ctx) {\n    const { alert: a, cfg = {} } = ctx;\n    const ticketLevel = Number(cfg.ticketLevel ?? 10);\n    const pageLevel = Number(cfg.pageLevel ?? 12);\n    const mapped = ctx.entityId !== null && ctx.entityId !== undefined;\n    const entityId = mapped ? Number(ctx.entityId) : Number(cfg.defaultEntityId ?? 0);\n    const key = wzhKey(a.agent_id, a.rule_id);\n    const summary = { alert_id: a.alert_id, rule_id: a.rule_id, level: a.level, client_code: a.client_code || null, entity_id: entityId, mapped };\n    const mitre = a.mitre || {};\n    const rows = [\n      ['Client', a.client_code || 'UNMAPPED'], ['Site', a.site_code], ['Agent', `${a.agent_name} (#${a.agent_id})`], ['Agent IP', a.agent_ip],\n      ['Rule', `${a.rule_id} – ${a.description}`], ['Level', a.level], ['Groups', a.groups.join(', ')],\n      ['MITRE', [].concat(mitre.id || []).concat(mitre.tactic || []).join(', ')], ['Source IP', a.srcip],\n      ['Time', a.timestamp], ['Wazuh alert ID', a.alert_id], ['Log', a.full_log],\n    ];\n\n    if (a.level < ticketLevel) return { action: 'noop', ops: [], notify: null, summary: { ...summary, action: 'noop', reason: `level below ${ticketLevel}` } };\n\n    const existing = findByKey(ctx.alertTickets, key, { openOnly: true });\n    if (existing) {\n      return {\n        action: 'followup',\n        ops: [{ path: '/ITILFollowup', body: { input: clean_({ itemtype: 'Ticket', items_id: Number(existing.id), is_private: 1, requesttypes_id: cfg.requestTypeId || undefined,\n          content: htmlRows('Repeat security alert (same agent and rule).', rows) }) } }],\n        notify: null, summary: { ...summary, action: 'followup', ticket_id: Number(existing.id) },\n      };\n    }\n    const input = {\n      name: truncate(`${key} ${a.agent_name}: ${a.description}`, 250), entities_id: entityId, type: 1, status: TICKET_STATUS.NEW,\n      ...wazuhLevelToGlpi(a.level), requesttypes_id: cfg.requestTypeId || undefined, _groups_id_assign: cfg.socGroupId || undefined,\n      content: htmlRows('Security alert raised by Wazuh. Containment needs SOC approval in this ticket (SOP-03).', rows,\n        'Opened automatically by WiseSphere (Wazuh → n8n → GLPI).'),\n    };\n    const notify = a.level >= pageLevel\n      ? { channel: 'soc', message: `WiseSphere SEC L${a.level} ${a.client_code || 'UNMAPPED'}: ${truncate(a.agent_name + ' – ' + a.description, 110)}` }\n      : null;\n    return { action: 'create', ops: [{ path: '/Ticket', body: { input: clean_(input) } }], notify, summary: { ...summary, action: 'create' } };\n  }\n\n  // ---------------------------------------------------------------- SLA watch (WF-04)\n\n  /** \"WiseSphere > CL001 - Pilot Client\" -> \"CL001\" */\n  function clientFromEntityName(name) {\n    const m = String(name ?? '').match(/\\b(CL[0-9]{3})\\b/);\n    return m ? m[1] : '';\n  }\n\n  /** Local wall-clock parts for an IANA zone. */\n  function localParts(date, timeZone) {\n    const f = new Intl.DateTimeFormat('en-GB', { timeZone, weekday: 'short', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });\n    const parts = Object.fromEntries(f.formatToParts(date).map((p) => [p.type, p.value]));\n    const dow = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].indexOf(parts.weekday);\n    return { dow, minutes: Number(parts.hour) * 60 + Number(parts.minute) };\n  }\n\n  function isBusinessHours(date, calendar) {\n    if (!calendar) return true;\n    const { dow, minutes } = localParts(date, calendar.timezone || 'UTC');\n    const toMin = (hhmm) => { const [h, m] = String(hhmm).split(':').map(Number); return h * 60 + m; };\n    return calendar.days.includes(dow) && minutes >= toMin(calendar.start) && minutes < toMin(calendar.end);\n  }\n\n  /**\n   * Decide which SLA SMS to send. Rows come from GLPI search, already split by stage:\n   *   rows = [{ id, name, priority, entity, stage: 'AT RISK'|'BREACHED', kind: 'TTO'|'TTR' }]\n   * policy = { tenants: { CL001: { tier, country } }, tiers: {...from config/sla.yaml}, calendars: {...} }\n   * sent   = { \"<id>:<kind>:<stage>\": epochMs } (workflow static data, used for dedupe)\n   */\n  function decideSlaAlerts(rows, policy, sent, now) {\n    const out = [];\n    const nowMs = now.getTime();\n    const seen = new Set();\n    for (const r of rows || []) {\n      const key = `${r.id}:${r.kind}:${r.stage}`;\n      if (seen.has(key) || (sent && sent[key])) continue;\n      seen.add(key);\n      const client = clientFromEntityName(r.entity);\n      const tenant = (policy.tenants || {})[client] || {};\n      const tierName = tenant.tier || 'silver';\n      const tier = (policy.tiers || {})[tierName] || { after_hours_priorities: [5, 6] };\n      const cal = (policy.calendars || {})[tenant.country || 'KW'];\n      const inHours = isBusinessHours(now, cal);\n      const prio = Number(r.priority);\n      if (!inHours && !(tier.after_hours_priorities || []).includes(prio)) continue;\n      out.push({\n        key, ticket_id: Number(r.id), channel: inHours ? 'desk' : 'noc',\n        message: `WiseSphere SLA ${r.stage} ${client || '?'} ${tierName.toUpperCase()} P${priorityLabel(prio)} ${r.kind} #${r.id}: ${truncate(r.name, 80)}`,\n      });\n    }\n    // prune dedupe memory older than 3 days\n    const pruned = {};\n    for (const [k, t] of Object.entries(sent || {})) if (nowMs - Number(t) < 3 * 86400000) pruned[k] = t;\n    for (const o of out) pruned[o.key] = nowMs;\n    return { alerts: out, sent: pruned };\n  }\n\n  /** GLPI priority 6/5 -> P1, 4 -> P2, 3 -> P3, else P4 */\n  function priorityLabel(p) {\n    const n = Number(p);\n    return n >= 5 ? 1 : n === 4 ? 2 : n === 3 ? 3 : 4;\n  }\n\n  // ---------------------------------------------------------------- CSAT (WF-03)\n\n  /** rows: GLPI TicketSatisfaction items. Returns new low scores (<= maxScore) not yet processed. */\n  function decideCsat(rows, processed, maxScore = 2) {\n    const done = new Set((processed || []).map(String));\n    const low = (rows || []).filter((r) => r && r.satisfaction !== null && r.satisfaction !== undefined && r.satisfaction !== ''\n      && Number(r.satisfaction) <= maxScore && !done.has(String(r.id)));\n    const ids = [...done, ...low.map((r) => String(r.id))].slice(-2000);\n    return {\n      tasks: low.map((r) => ({\n        ticket_id: Number(r.tickets_id),\n        score: Number(r.satisfaction),\n        content: htmlRows('Low satisfaction score – service-recovery call needed within 1 business day (SOP-05).',\n          [['Score', `${r.satisfaction} / 5`], ['Client comment', r.comment]]),\n      })),\n      processed: ids,\n    };\n  }\n\n  /** Drop undefined keys so GLPI does not receive \"undefined\"/null for optional fields. */\n  function clean_(obj) {\n    const o = {};\n    for (const [k, v] of Object.entries(obj)) if (v !== undefined && v !== null && v !== '') o[k] = v;\n    return o;\n  }\n\n  return {\n    TICKET_STATUS, clean, parseTags, escapeHtml, htmlRows, truncate,\n    zbxSeverityToGlpi, wazuhLevelToGlpi, glpiPriority, priorityLabel,\n    zbxKey, stormKey, wzhKey, findByKey,\n    normalizeZabbixEvent, zbxTicketName, decideZabbix,\n    normalizeWazuhAlert, decideWazuh,\n    clientFromEntityName, isBusinessHours, decideSlaAlerts,\n    decideCsat, compact: clean_,\n  };\n})();\n\nif (typeof module !== 'undefined' && module.exports) module.exports = WS;\n\n// ---- node logic ----\nfunction body(nodeName, { allowEmpty = true } = {}) {\n  const r = $(nodeName).first().json;\n  const code = Number(r.statusCode || 200);\n  const b = r.body !== undefined ? r.body : r;\n  // GLPI answers 400 ERROR_RANGE_EXCEED_TOTAL when a search has no rows.\n  const empty = code === 400 && JSON.stringify(b).includes('ERROR_RANGE_EXCEED_TOTAL');\n  if (empty && allowEmpty) return [];\n  if (code < 200 || code >= 300) throw new Error(`${nodeName} failed: HTTP ${code} ${JSON.stringify(b).slice(0, 300)}`);\n  return b;\n}\nconst envInt = (name, dflt) => { const v = $env[name]; return v === undefined || v === '' ? dflt : Number(v); };\n\nconst store = $getWorkflowStaticData('global');\nconst rows = body('Get Surveys');\nconst r = WS.decideCsat(Array.isArray(rows) ? rows : [], store.csatProcessed || [], envInt('WS_CSAT_LOW_SCORE', 2));\nstore.csatProcessed = r.processed;\nconst group = envInt('WS_GLPI_GROUP_SDM', 0);\nif (!r.tasks.length) return [{ json: { noop: true } }];\nreturn r.tasks.map((t) => ({ json: { noop: false, path: '/TicketTask', body: { input: WS.compact({ tickets_id: t.ticket_id, content: t.content, is_private: 1, state: 1, groups_id_tech: group || undefined }) } } }));\n"
+      },
+      "id": "81e81b6d-8734-5d46-ab82-1df9808fbcd6",
+      "name": "Decide",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "0474b6d7-fb4c-5e76-abdc-8f8aa24413b9",
+              "leftValue": "={{ $json.noop !== true }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "bf219f1b-5987-5011-a29f-acf1c089fdc8",
+      "name": "Has Writes?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1100,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.WS_GLPI_API_URL + $json.path }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Session-Token",
+              "value": "={{ $('GLPI initSession').first().json.session_token }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 20000
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.body) }}"
+      },
+      "id": "aeedf586-58d8-5046-a7e9-4af02a8f6d78",
+      "name": "GLPI Write",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1320,
+        200
+      ],
+      "credentials": {
+        "httpCustomAuth": {
+          "id": "wsGlpiApiCred001",
+          "name": "WS GLPI API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.WS_GLPI_API_URL }}/killSession",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Session-Token",
+              "value": "={{ $('GLPI initSession').first().json.session_token }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "966917a7-35dc-59ee-ae60-4214af0fd8ad",
+      "name": "GLPI killSession",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1540,
+        300
+      ],
+      "credentials": {
+        "httpCustomAuth": {
+          "id": "wsGlpiApiCred001",
+          "name": "WS GLPI API"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "id": "565cc2ac-47c6-5f88-9e5e-8ca180f0cabe",
+      "name": "Run Now",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        500
+      ]
+    }
+  ],
+  "connections": {
+    "GLPI initSession": {
+      "main": [
+        [
+          {
+            "node": "GLPI Root Scope",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Daily 08:10": {
+      "main": [
+        [
+          {
+            "node": "GLPI initSession",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run Now": {
+      "main": [
+        [
+          {
+            "node": "GLPI initSession",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GLPI Root Scope": {
+      "main": [
+        [
+          {
+            "node": "Get Surveys",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Surveys": {
+      "main": [
+        [
+          {
+            "node": "Decide",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Decide": {
+      "main": [
+        [
+          {
+            "node": "Has Writes?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Writes?": {
+      "main": [
+        [
+          {
+            "node": "GLPI Write",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "GLPI killSession",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GLPI Write": {
+      "main": [
+        [
+          {
+            "node": "GLPI killSession",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "wsWF99ErrorAlert"
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "description": "INT-03: daily - GLPI satisfaction scores <=2 -> private service-recovery task for the Service Delivery Manager group.",
+    "generatedBy": "n8n/build_workflows.py - do not edit in the n8n UI, change the source and rebuild"
+  },
+  "tags": []
+}

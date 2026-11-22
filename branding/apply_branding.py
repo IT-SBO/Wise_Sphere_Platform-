@@ -1,0 +1,85 @@
+#!/usr/bin/env python3
+"""Apply the WiseSphere brand (branding/tokens.json + assets) to the platform UIs.
+
+  apply_branding.py --render                       # write branding/build/ (CSS preview), no API calls
+  apply_branding.py --glpi-url http://localhost:8090/apirest.php --admin-password ...
+
+Where the brand shows up:
+  GLPI 11 (client portal + staff UI)  custom CSS on the root entity, inherited by client entities   <- this script
+  Grafana 13 OSS                      GF_BRANDING_APP_TITLE (hub/.env BRAND_NAME). Custom logos on the
+                                      login page and menu are a Grafana Enterprise feature in OSS 13.
+  SMS / ticket texts                  brand name in n8n messages ("WiseSphere ...")
+  Monthly client report (RPT-01)      will read tokens.json when the report pack is built (WBS 5.3)
+"""
+from __future__ import annotations
+
+import argparse
+import base64
+import json
+import mimetypes
+import sys
+from pathlib import Path
+
+HERE = Path(__file__).resolve().parent
+sys.path.insert(0, str(HERE.parent / "glpi"))
+
+
+def rgb(hex_: str) -> str:
+    h = hex_.lstrip("#")
+    return ",".join(str(int(h[i:i + 2], 16)) for i in (0, 2, 4))
+
+
+def data_uri(path: Path) -> str:
+    mime = mimetypes.guess_type(path.name)[0] or "image/svg+xml"
+    return f"data:{mime};base64,{base64.b64encode(path.read_bytes()).decode()}"
+
+
+def render(tokens: dict) -> str:
+    c = tokens["colors"]
+    logo = HERE / tokens.get("logo", "")
+    logo_css = ""
+    if tokens.get("logo") and logo.is_file():
+        uri = data_uri(logo)
+        logo_css = (f".glpi-logo, .navbar-brand .glpi-logo, .page-anonymous .glpi-logo {{ background-image: url('{uri}') !important;"
+                    " background-size: contain; background-repeat: no-repeat; background-position: center; }}")
+    values = {**c, "primary_rgb": rgb(c["primary"]), "font_family": tokens["font_family"],
+              "font_family_arabic": tokens["font_family_arabic"], "logo_css": logo_css}
+    css = (HERE / "glpi-custom.css.tmpl").read_text()
+    for k, v in values.items():
+        css = css.replace("{{" + k + "}}", str(v))
+    return css
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--tokens", default=str(HERE / "tokens.json"))
+    ap.add_argument("--render", action="store_true")
+    ap.add_argument("--glpi-url")
+    ap.add_argument("--admin-user", default="glpi")
+    ap.add_argument("--admin-password")
+    ap.add_argument("--app-token", help="GLPI API client app token, if the client used requires one")
+    a = ap.parse_args()
+    tokens = json.loads(Path(a.tokens).read_text())
+    css = render(tokens)
+    out = HERE / "build"
+    out.mkdir(exist_ok=True)
+    (out / "glpi-custom.css").write_text(css)
+    print(f"rendered {out / 'glpi-custom.css'} ({len(css)} bytes)")
+    if a.render or not a.glpi_url:
+        return 0
+    from provision_glpi import Glpi  # noqa: E402
+    g = Glpi(a.glpi_url, a.admin_user, a.admin_password, a.app_token)
+    try:
+        g.call("PUT", "/Entity/0", {"input": {"enable_custom_css": 1, "custom_css_code": css}})
+        # client entities inherit (-2 = inherit from parent)
+        for e in g.call("GET", "/Entity", params={"range": "0-500"}) or []:
+            if int(e["id"]) != 0 and str(e.get("enable_custom_css")) not in ("-2",):
+                g.call("PUT", f"/Entity/{e['id']}", {"input": {"enable_custom_css": -2}})
+    finally:
+        g.close()
+    print("GLPI: brand CSS applied to the root entity (inherited by client entities)")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

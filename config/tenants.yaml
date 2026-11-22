@@ -1,0 +1,35 @@
+# WiseSphere client-code registry (PRD §4.7).
+# One CLnnn code ties every tool together: GLPI entity tag, GLPI Agent --tag,
+# Zabbix host group / proxy / host tag, Wazuh agent group + labels,
+# Grafana organisation, vault collection and WireGuard peer.
+#
+# This file is the single source of truth. Provisioning scripts read it:
+#   glpi/provision_glpi.py      -> entities, SLA assignment
+#   zabbix/provision_zabbix.py  -> host groups, proxies, PSK
+#   spoke/new-spoke.sh          -> WireGuard peer + spoke .env
+#
+# Never put credentials here (NFR-SEC-04). Credentials live in the vault.
+
+root_entity: WiseSphere
+
+# WireGuard: hub = 10.250.0.0/24 (10.250.0.1); client CLnnn site -> 10.250.<nnn>.0/24 (one /24 per site).
+tenants:
+  - code: CL000
+    name: WISE Internal
+    tier: gold            # silver | gold | platinum  (PRD §8)
+    country: KW           # business-hours calendar (config/sla.yaml)
+    language: en_GB
+    sites:
+      - code: HQ
+        wg_subnet: 10.250.250.0/24   # 10.250.0.0/24 is reserved for the hub
+        spoke_size: small # small = 2 vCPU/4 GB/60 GB, standard = 4/8/120 (C-10)
+
+  - code: CL001
+    name: Pilot Client
+    tier: gold
+    country: KW
+    language: ar_SA
+    sites:
+      - code: KWI
+        wg_subnet: 10.250.1.0/24
+        spoke_size: small

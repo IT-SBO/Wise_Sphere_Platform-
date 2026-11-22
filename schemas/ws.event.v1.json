@@ -1,0 +1,95 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://wisesphere.local/schemas/ws.event.v1.json",
+  "title": "ws.event.v1 - Zabbix monitoring event (INT-01)",
+  "description": "Sent by the Zabbix 'WiseSphere n8n' media type to n8n WF-01 (POST /webhook/zbx-event). Unresolved Zabbix macros (values that still look like {MACRO}) are treated as empty. Either 'status' or 'event_value' ({EVENT.VALUE}: 1 problem, 0 recovery) must be present; 'event_update' = {EVENT.UPDATE.STATUS} marks acknowledgements/comments.",
+  "type": "object",
+  "required": [
+    "schema",
+    "event_id",
+    "event_name",
+    "host"
+  ],
+  "properties": {
+    "schema": {
+      "const": "ws.event.v1"
+    },
+    "event_id": {
+      "type": "string",
+      "pattern": "^[0-9]+$",
+      "description": "{EVENT.ID} - id of the PROBLEM event, also on recovery"
+    },
+    "status": {
+      "enum": [
+        "PROBLEM",
+        "RESOLVED",
+        "UPDATE"
+      ],
+      "description": "From {EVENT.VALUE}/{EVENT.UPDATE.STATUS}"
+    },
+    "event_value": {
+      "enum": [
+        "0",
+        "1"
+      ]
+    },
+    "event_update": {
+      "type": "string"
+    },
+    "severity": {
+      "type": "string",
+      "pattern": "^[0-5]$",
+      "description": "{EVENT.NSEVERITY}: 0 not classified .. 5 disaster"
+    },
+    "event_name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "host": {
+      "type": "string",
+      "minLength": 1,
+      "description": "{HOST.HOST} technical name"
+    },
+    "host_name": {
+      "type": "string",
+      "description": "{HOST.NAME} visible name"
+    },
+    "host_ip": {
+      "type": "string"
+    },
+    "client_code": {
+      "type": "string",
+      "pattern": "^(CL[0-9]{3})?$"
+    },
+    "site_code": {
+      "type": "string"
+    },
+    "glpi_asset": {
+      "type": "string",
+      "pattern": "^([A-Za-z]+:[0-9]+)?$",
+      "description": "itemtype:id (ITAM-05)"
+    },
+    "tags": {
+      "type": "string",
+      "description": "{EVENT.TAGSJSON} - used when client/site/glpi_asset are not sent explicitly"
+    },
+    "event_time": {
+      "type": "string"
+    },
+    "opdata": {
+      "type": "string"
+    },
+    "trigger_id": {
+      "type": "string"
+    },
+    "event_url": {
+      "type": "string"
+    },
+    "update_message": {
+      "type": "string"
+    },
+    "update_user": {
+      "type": "string"
+    }
+  }
+}

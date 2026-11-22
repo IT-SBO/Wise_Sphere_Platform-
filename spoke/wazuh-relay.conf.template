@@ -1,0 +1,6 @@
+# Wazuh agent relay (C-03). Agents on the client LAN talk to this spoke; the spoke
+# forwards through the WireGuard tunnel to the Wazuh manager. Wazuh encrypts end to end (AES + TLS enrolment).
+upstream wazuh_events { server ${WAZUH_MANAGER_IP}:1514; }
+upstream wazuh_enrol  { server ${WAZUH_MANAGER_IP}:1515; }
+server { listen 1514; proxy_pass wazuh_events; proxy_timeout 10m; }
+server { listen 1515; proxy_pass wazuh_enrol; }

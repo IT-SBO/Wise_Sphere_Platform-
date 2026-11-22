@@ -1,0 +1,482 @@
+{
+  "uid": "ws-noc-overview",
+  "title": "WiseSphere – NOC Global Overview",
+  "tags": [
+    "wisesphere",
+    "noc"
+  ],
+  "timezone": "browser",
+  "refresh": "30s",
+  "schemaVersion": 41,
+  "version": 1,
+  "editable": false,
+  "time": {
+    "from": "now-24h",
+    "to": "now"
+  },
+  "description": "NOC wall (R-15): DSH-01 health matrix, DSH-02 incidents, DSH-03 SLA countdown, CSAT and PRD §4.2 goals. Refresh 30 s (NFR-PERF-01).",
+  "panels": [
+    {
+      "id": 1,
+      "title": "Global Health Matrix (DSH-01)",
+      "type": "table",
+      "datasource": {
+        "type": "mysql",
+        "uid": "ws-glpi"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 14,
+        "h": 10
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "mysql",
+            "uid": "ws-glpi"
+          },
+          "format": "table",
+          "rawQuery": true,
+          "editorMode": "code",
+          "rawSql": "SELECT e.tag AS client, e.name AS name,\n  COALESCE(SUM(t.is_deleted=0 AND t.status NOT IN (5,6) AND t.priority>=5),0) AS open_p1,\n  COALESCE(SUM(t.is_deleted=0 AND t.status NOT IN (5,6) AND t.priority=4),0) AS open_p2,\n  COALESCE(SUM(t.is_deleted=0 AND t.status NOT IN (5,6) AND t.time_to_resolve < NOW()),0) AS sla_breached,\n  COALESCE(SUM(t.is_deleted=0 AND t.status NOT IN (5,6) AND t.name LIKE '[STORM:%'),0) AS storms,\n  CASE WHEN SUM(t.is_deleted=0 AND t.status NOT IN (5,6) AND (t.priority>=5 OR t.time_to_resolve < NOW()))>0 THEN 'RED'\n       WHEN SUM(t.is_deleted=0 AND t.status NOT IN (5,6) AND t.priority=4)>0 THEN 'AMBER' ELSE 'GREEN' END AS status\nFROM glpi_entities e LEFT JOIN glpi_tickets t ON t.entities_id=e.id\nWHERE e.tag LIKE 'CL%'\nGROUP BY e.id, e.tag, e.name ORDER BY FIELD(status,'RED','AMBER','GREEN'), e.tag"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto"
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "status"
+            },
+            "properties": [
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "RED": {
+                        "color": "red",
+                        "index": 0
+                      },
+                      "AMBER": {
+                        "color": "orange",
+                        "index": 1
+                      },
+                      "GREEN": {
+                        "color": "green",
+                        "index": 2
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-background"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 2,
+      "title": "Automated intake – 30 d (goal ≥ 90%)",
+      "type": "stat",
+      "datasource": {
+        "type": "mysql",
+        "uid": "ws-glpi"
+      },
+      "gridPos": {
+        "x": 14,
+        "y": 0,
+        "w": 5,
+        "h": 5
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "mysql",
+            "uid": "ws-glpi"
+          },
+          "format": "table",
+          "rawQuery": true,
+          "editorMode": "code",
+          "rawSql": "SELECT ROUND(100*SUM(r.name IN ('Monitoring','Security'))/NULLIF(COUNT(*),0),1) AS automated\nFROM glpi_tickets t LEFT JOIN glpi_requesttypes r ON r.id=t.requesttypes_id\nWHERE t.is_deleted=0 AND t.date >= NOW() - INTERVAL 30 DAY"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 80
+              },
+              {
+                "color": "green",
+                "value": 90
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value"
+      }
+    },
+    {
+      "id": 3,
+      "title": "P1/P2 within SLA – 30 d (goal ≥ 95%)",
+      "type": "stat",
+      "datasource": {
+        "type": "mysql",
+        "uid": "ws-glpi"
+      },
+      "gridPos": {
+        "x": 19,
+        "y": 0,
+        "w": 5,
+        "h": 5
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "mysql",
+            "uid": "ws-glpi"
+          },
+          "format": "table",
+          "rawQuery": true,
+          "editorMode": "code",
+          "rawSql": "SELECT ROUND(100*SUM(t.time_to_resolve IS NULL OR t.solvedate <= t.time_to_resolve)/NULLIF(COUNT(*),0),1) AS sla_ok\nFROM glpi_tickets t WHERE t.is_deleted=0 AND t.priority>=4 AND t.solvedate >= NOW() - INTERVAL 30 DAY"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 90
+              },
+              {
+                "color": "green",
+                "value": 95
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value"
+      }
+    },
+    {
+      "id": 4,
+      "title": "CSAT – 30 d (goal ≥ 4.3)",
+      "type": "stat",
+      "datasource": {
+        "type": "mysql",
+        "uid": "ws-glpi"
+      },
+      "gridPos": {
+        "x": 14,
+        "y": 5,
+        "w": 5,
+        "h": 5
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "mysql",
+            "uid": "ws-glpi"
+          },
+          "format": "table",
+          "rawQuery": true,
+          "editorMode": "code",
+          "rawSql": "SELECT ROUND(AVG(s.satisfaction),2) AS csat FROM glpi_ticketsatisfactions s\nWHERE s.date_answered >= NOW() - INTERVAL 30 DAY"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 4
+              },
+              {
+                "color": "green",
+                "value": 4.3
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value"
+      }
+    },
+    {
+      "id": 5,
+      "title": "Survey response rate – 30 d (goal ≥ 30%)",
+      "type": "stat",
+      "datasource": {
+        "type": "mysql",
+        "uid": "ws-glpi"
+      },
+      "gridPos": {
+        "x": 19,
+        "y": 5,
+        "w": 5,
+        "h": 5
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "mysql",
+            "uid": "ws-glpi"
+          },
+          "format": "table",
+          "rawQuery": true,
+          "editorMode": "code",
+          "rawSql": "SELECT ROUND(100*SUM(s.date_answered IS NOT NULL)/NULLIF(COUNT(*),0),1) AS response_rate\nFROM glpi_ticketsatisfactions s WHERE s.date_begin >= NOW() - INTERVAL 30 DAY"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 30
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value"
+      }
+    },
+    {
+      "id": 6,
+      "title": "Active Incidents Wall – severity ≥ Average (DSH-02)",
+      "type": "alexanderzobnin-zabbix-triggers-panel",
+      "datasource": {
+        "type": "alexanderzobnin-zabbix-datasource",
+        "uid": "ws-zabbix"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 10,
+        "w": 24,
+        "h": 12
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "alexanderzobnin-zabbix-datasource",
+            "uid": "ws-zabbix"
+          },
+          "queryType": "5",
+          "group": {
+            "filter": "/^CL[0-9]{3}\\//"
+          },
+          "host": {
+            "filter": ""
+          },
+          "application": {
+            "filter": ""
+          },
+          "proxy": {
+            "filter": ""
+          },
+          "trigger": {
+            "filter": ""
+          },
+          "tags": {
+            "filter": ""
+          },
+          "options": {
+            "minSeverity": 3,
+            "acknowledged": 2,
+            "sortProblems": "default",
+            "showProblems": "problems",
+            "limit": 200,
+            "hostsInMaintenance": false
+          }
+        }
+      ],
+      "options": {
+        "layout": "table",
+        "showTags": true,
+        "showDatasourceName": false,
+        "hostField": true,
+        "hostTechNameField": false,
+        "severityField": true,
+        "statusField": true,
+        "ageField": true,
+        "descriptionField": true,
+        "pageSize": 20,
+        "fontSize": "100%"
+      }
+    },
+    {
+      "id": 7,
+      "title": "SLA countdown – open tickets nearest to breach (DSH-03)",
+      "type": "table",
+      "datasource": {
+        "type": "mysql",
+        "uid": "ws-glpi"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 22,
+        "w": 24,
+        "h": 10
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "mysql",
+            "uid": "ws-glpi"
+          },
+          "format": "table",
+          "rawQuery": true,
+          "editorMode": "code",
+          "rawSql": "SELECT t.id AS ticket, e.tag AS client, t.priority, LEFT(t.name,90) AS title,\n  t.time_to_resolve AS due, TIMESTAMPDIFF(MINUTE, NOW(), t.time_to_resolve) AS minutes_left\nFROM glpi_tickets t JOIN glpi_entities e ON e.id=t.entities_id\nWHERE t.is_deleted=0 AND t.status NOT IN (5,6) AND t.time_to_resolve IS NOT NULL\nORDER BY t.time_to_resolve ASC LIMIT 20"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "minutes_left"
+            },
+            "properties": [
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-background"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "red",
+                      "value": null
+                    },
+                    {
+                      "color": "orange",
+                      "value": 0
+                    },
+                    {
+                      "color": "yellow",
+                      "value": 15
+                    },
+                    {
+                      "color": "green",
+                      "value": 60
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ],
+  "templating": {
+    "list": []
+  },
+  "annotations": {
+    "list": []
+  }
+}

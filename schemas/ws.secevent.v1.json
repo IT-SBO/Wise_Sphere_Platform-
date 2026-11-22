@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://wisesphere.local/schemas/ws.secevent.v1.json",
+  "title": "ws.secevent.v1 - Wazuh security alert (INT-02)",
+  "description": "Sent by the Wazuh integration 'custom-n8n' (wazuh/custom-n8n.py) to n8n WF-02 (POST /webhook/wazuh-alert) for rule level >= 10.",
+  "type": "object",
+  "required": ["schema", "alert_id", "rule", "agent"],
+  "properties": {
+    "schema": { "const": "ws.secevent.v1" },
+    "alert_id": { "type": "string" },
+    "timestamp": { "type": "string" },
+    "rule": {
+      "type": "object",
+      "required": ["id", "level", "description"],
+      "properties": {
+        "id": { "type": "string" },
+        "level": { "type": "integer", "minimum": 0, "maximum": 16 },
+        "description": { "type": "string" },
+        "groups": { "type": "array", "items": { "type": "string" } },
+        "mitre": { "type": "object" }
+      }
+    },
+    "agent": {
+      "type": "object",
+      "required": ["id", "name"],
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "ip": { "type": "string" },
+        "labels": { "type": "object", "properties": { "client": { "type": "string" }, "site": { "type": "string" } } }
+      }
+    },
+    "srcip": { "type": "string" },
+    "full_log": { "type": "string" }
+  }
+}

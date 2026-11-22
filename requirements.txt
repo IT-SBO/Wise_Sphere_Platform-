@@ -1,0 +1,6 @@
+# Tooling for provisioning scripts, workflow generator and tests (Python 3.11+)
+requests==2.34.2
+PyYAML==6.0.3
+cryptography==50.0.1
+jsonschema==4.26.0
+pytest==9.1.1
