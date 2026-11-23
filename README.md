@@ -6,6 +6,8 @@ Grafana 13 in a hub-and-spoke design, connected by a WiseSphere integration serv
 The PoC proved the core loop (device down → ticket, no human). This repository turns that into the
 Release-1 platform: multi-client, deduplicated, storm-safe, SLA-aware, secured, and repeatable from Git.
 
+> **Start here:** [`WiseSphere_Platform.md`](WiseSphere_Platform.md) – the project reference with every installation and run step.
+>
 > **Development document:** [`docs/WiseSphere_Development_Document.docx`](docs/WiseSphere_Development_Document.docx) – architecture, code, APIs, set-up, testing, security and the development guide.
 >
 > Design and logo: everything visual lives in [`branding/`](branding/README.md). Current colours are placeholders;
