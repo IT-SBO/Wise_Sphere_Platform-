@@ -24,6 +24,7 @@ import ipaddress
 import json
 import os
 import sys
+import time
 from pathlib import Path
 
 import requests
@@ -33,6 +34,7 @@ ROOT = Path(__file__).resolve().parent.parent
 GLPI_PRIORITY_NAME = {5: "P1", 4: "P2", 3: "P3", 2: "P4"}
 SLA_TTR, SLA_TTO = 0, 1
 RULE_ON_ADD = 1
+TIMEOUT = int(os.environ.get("WS_GLPI_TIMEOUT", "180"))  # seconds per API call
 
 
 class Glpi:
@@ -42,14 +44,25 @@ class Glpi:
         self.s.headers["Content-Type"] = "application/json"
         if app_token:
             self.s.headers["App-Token"] = app_token
-        r = self.s.get(f"{self.url}/initSession", auth=(user, password), timeout=30)
+        # GLPI 11 builds its caches on the first API call - on slow disks (e.g. Docker Desktop on a
+        # Windows drive) that can take minutes, so wait long and retry instead of failing.
+        r = None
+        for attempt in range(1, 6):
+            try:
+                r = self.s.get(f"{self.url}/initSession", auth=(user, password), timeout=TIMEOUT)
+                break
+            except (requests.Timeout, requests.ConnectionError) as e:
+                print(f"GLPI not answering yet (attempt {attempt}/5): {e.__class__.__name__}; retrying in 15 s", file=sys.stderr)
+                time.sleep(15)
+        if r is None:
+            sys.exit(f"GLPI did not answer at {self.url} - check `docker logs ws-glpi` and that Docker has enough memory")
         if r.status_code != 200:
             sys.exit(f"GLPI login failed: HTTP {r.status_code} {r.text[:300]}")
         self.s.headers["Session-Token"] = r.json()["session_token"]
         self.call("POST", "/changeActiveEntities", {"entities_id": 0, "is_recursive": True})
 
     def call(self, method: str, path: str, body=None, params=None, ok_empty=True):
-        r = self.s.request(method, f"{self.url}{path}", json=body, params=params, timeout=30)
+        r = self.s.request(method, f"{self.url}{path}", json=body, params=params, timeout=TIMEOUT)
         if r.status_code == 400 and ok_empty and "ERROR_RANGE_EXCEED_TOTAL" in r.text:
             return []
         if r.status_code >= 300 and r.status_code != 206:

@@ -16,7 +16,7 @@ builder.Services.Configure<PortalOptions>(builder.Configuration.GetSection(Porta
 builder.Services.Configure<GlpiOptions>(builder.Configuration.GetSection(GlpiOptions.Section));
 builder.Services.Configure<ZabbixOptions>(builder.Configuration.GetSection(ZabbixOptions.Section));
 builder.Services.Configure<IntegrationOptions>(builder.Configuration.GetSection(IntegrationOptions.Section));
-static HttpClient NewHttp() => new(new SocketsHttpHandler { PooledConnectionLifetime = TimeSpan.FromMinutes(5) }) { Timeout = TimeSpan.FromSeconds(30) };
+static HttpClient NewHttp() => new(new SocketsHttpHandler { PooledConnectionLifetime = TimeSpan.FromMinutes(5) }) { Timeout = TimeSpan.FromSeconds(150) };
 builder.Services.AddSingleton(sp => ActivatorUtilities.CreateInstance<GlpiClient>(sp, NewHttp()));
 builder.Services.AddSingleton(sp => ActivatorUtilities.CreateInstance<MonitoringService>(sp, NewHttp()));
 builder.Services.AddSingleton<SessionStore>();
@@ -62,7 +62,13 @@ var api = app.MapGroup("/api");
 api.MapPost("/auth/login", async (LoginRequest r, SessionStore sessions, HttpContext ctx, CancellationToken ct) =>
 {
     if (string.IsNullOrWhiteSpace(r.Username) || string.IsNullOrEmpty(r.Password)) return Results.BadRequest(new { error = "username and password are required" });
-    var s = await sessions.LoginAsync(r.Username.Trim(), r.Password, ct);
+    PortalSession? s;
+    try { s = await sessions.LoginAsync(r.Username.Trim(), r.Password, ct); }
+    catch (Exception e) when (e is HttpRequestException or TaskCanceledException or WiseSphere.Glpi.GlpiException)
+    {
+        app.Logger.LogWarning(e, "GLPI unavailable during login");
+        return Results.Json(new { error = "GLPI is not answering" }, statusCode: 503);
+    }
     if (s is null) return Results.Json(new { error = "invalid credentials" }, statusCode: 401);
     ctx.Response.Cookies.Append(Cookie, s.Id, new CookieOptions
     {

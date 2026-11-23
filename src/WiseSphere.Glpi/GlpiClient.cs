@@ -21,7 +21,7 @@ public sealed class GlpiOptions
     public string Password { get; set; } = "";
     /// <summary>Parallel GLPI sessions. PHP locks a session per request, so parallel work needs several sessions.</summary>
     public int SessionPoolSize { get; set; } = 4;
-    public int TimeoutSeconds { get; set; } = 20;
+    public int TimeoutSeconds { get; set; } = 90;
 }
 
 public sealed class GlpiException(string message, HttpStatusCode? status = null) : Exception(message)
