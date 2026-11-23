@@ -10,8 +10,8 @@ Release-1 platform: multi-client, deduplicated, storm-safe, SLA-aware, secured, 
 >
 > **Development document:** [`docs/WiseSphere_Development_Document.docx`](docs/WiseSphere_Development_Document.docx) – architecture, code, APIs, set-up, testing, security and the development guide.
 >
-> Design and logo: everything visual lives in [`branding/`](branding/README.md). The portal follows the WISE Group brand
-> (wisegroup.trade); change `branding/tokens.json` and run `make brand`.
+> Design: the portal, GLPI, Zabbix and Grafana use the WISE Group design (wisegroup.trade). Everything visual lives in
+> [`branding/`](branding/README.md); change `branding/tokens.json` and run `make brand`. Details: development document section 9.
 
 ## What is in the box
 
@@ -21,10 +21,11 @@ Release-1 platform: multi-client, deduplicated, storm-safe, SLA-aware, secured, 
 | `src/` | C# / .NET 10: `WiseSphere.Core` (event contracts + decision rules), `WiseSphere.Glpi` (GLPI API client), `WiseSphere.Integration` (webhooks, SLA watch, CSAT review, SMS), `WiseSphere.Portal` (portal back end) |
 | `web/portal/` | Angular 22 portal front end (English / Arabic, brand tokens) |
 | `tests/` | xUnit tests (`WiseSphere.Core.Tests`), Python tooling tests, end-to-end lab suite, TC-09 load test |
-| `glpi/` | `provision_glpi.py` – entities, SLAs, calendars, rules, survey, groups, service account, API client |
-| `zabbix/` | `provision_zabbix.py` – media type, action, host groups, device-role templates, platform self-monitoring; `add_hosts.py` – register client devices |
+| `glpi/` | `provision_glpi.py` – entities, SLAs, calendars, rules, survey, groups, service account, API client; `branding/` – logos and fonts for the GLPI brand |
+| `zabbix/` | `provision_zabbix.py` – media type, action, host groups, device-role templates, platform self-monitoring; `add_hosts.py` – register client devices; `web/` – branded Zabbix web image |
 | `wazuh/` | Integration script and config for the security layer (Phase 4) |
-| `grafana/` | Datasources + NOC Global Overview dashboard (DSH-01/02/03, CSAT, PRD goals) |
+| `grafana/` | Datasources + NOC Global Overview dashboard (DSH-01/02/03, CSAT, PRD goals); branded image (`Dockerfile`, `branding/`) |
+| `branding/` | WISE Group brand: `tokens.json`, logos, CSS templates, `apply_branding.py` (generates the brand files of every product) |
 | `hub/` | Production hub stack (Traefik, GLPI, integration service, Grafana, Zabbix) with the Technical Kit fixes |
 | `spoke/` | Client-site appliance: Zabbix active proxy (PSK, 72 h buffer), Wazuh relay, installer |
 | `lab/` | Whole platform on one machine with simulated devices and an SMS mock |
@@ -62,7 +63,7 @@ make lab-test
 | **WiseSphere portal** | http://localhost:8089 | `noc.operator` (staff) or `client.cl001` (client); password `LAB_USERS_PASSWORD` in `lab/.env` |
 | Integration service | http://localhost:8088/readyz, `/metrics` | – (webhooks need the `X-WS-Secret` header) |
 | SMS mock | http://localhost:8099/messages | – |
-| Grafana | http://localhost:3000 | `docker compose --profile grafana up -d grafana` in `lab/`, admin / see `lab/.env` |
+| Grafana | http://localhost:3000 | `docker compose --profile grafana up -d --build grafana` in `lab/`, admin / see `lab/.env` |
 
 `make lab-test` drives real Zabbix problems (via `zabbix_sender`) through the C# integration service into GLPI and checks:
 
