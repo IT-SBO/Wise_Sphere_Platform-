@@ -28,7 +28,7 @@ import { MonthlyReport, priorityLabel } from '../core/models';
     @if (r(); as r) {
       <article class="report">
         <header class="report-head">
-          <div class="brand"><span class="logo" aria-hidden="true"></span><span>WiseSphere</span></div>
+          <div class="report-brand"><img src="brand/logo.svg" alt="WISE Group" /><span>Wise<b>Sphere</b></span></div>
           <div>
             <h1>{{ 'rep.title' | t }}</h1>
             <p><strong>{{ r.clientName }}</strong> ({{ r.client }}) · {{ 'rep.period' | t }}: {{ monthLabel(r.month) }}</p>

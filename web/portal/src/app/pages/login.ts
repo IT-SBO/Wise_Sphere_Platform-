@@ -10,9 +10,14 @@ import { I18n, TranslatePipe } from '../core/i18n';
   imports: [FormsModule, TranslatePipe],
   template: `
     <div class="login">
+      <section class="login-hero" aria-hidden="true">
+        <p class="overline light">WISE Group</p>
+        <h1>Wise<b>Sphere</b></h1>
+        <p>{{ 'app.tagline' | t }}</p>
+      </section>
       <form class="card login-card" (ngSubmit)="submit()">
-        <div class="login-brand"><span class="logo logo-lg" aria-hidden="true"></span><h1>WiseSphere</h1></div>
-        <p class="muted">{{ 'app.tagline' | t }}</p>
+        <img src="brand/logo.svg" alt="WISE Group" class="login-logo" />
+        <p class="overline">WiseSphere</p>
         <h2>{{ 'auth.title' | t }}</h2>
         <label>{{ 'auth.username' | t }}<input name="u" [(ngModel)]="username" autocomplete="username" required autofocus /></label>
         <label>{{ 'auth.password' | t }}<input name="p" type="password" [(ngModel)]="password" autocomplete="current-password" required /></label>

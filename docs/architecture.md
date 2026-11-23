@@ -53,7 +53,7 @@ correct) while different clients run in parallel; GLPI sessions are pooled. Meas
 | 4.x | Wazuh layer | integration script + INT-02 ✅ (TC-07); Wazuh deployment, DLS roles, approved-block sub-flow – Phase 4 |
 | 5.1 | Grafana NOC wall | `grafana/` – DSH-01/02/03 + CSAT/goal tiles; GLPI queries ✅ verified |
 | 5.3 | Monthly reports | not started |
-| – | Branding | `branding/` – placeholder tokens, GLPI CSS applied ✅; waiting for final design + logo |
+| – | Branding | `branding/` – WISE Group brand (wisegroup.trade) on portal and GLPI ✅ |
 
 ## Version pins (NFR-OPS-03) – verified on Docker Hub, Nov 2026
 GLPI 11.0.13 · MariaDB 11.8.9 · Zabbix 8.0.0 (alpine) · PostgreSQL 17.12 · TimescaleDB 2.32.1-pg17 ·
