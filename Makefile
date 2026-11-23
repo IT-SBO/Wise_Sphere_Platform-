@@ -3,7 +3,7 @@ SHELL := /bin/bash
 PY ?= python3
 DOTNET ?= scripts/dotnet.sh
 
-.PHONY: web web-dev help build test unit check image lab-env lab-up lab-bootstrap lab-test lab-load-test lab-poc-test lab-logs lab-down lab-reset brand
+.PHONY: web web-dev help build test unit check image lab-env lab-up lab-bootstrap lab-test lab-load-test lab-poc-test lab-logs lab-down lab-reset brand brand-glpi
 
 help:
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-15s %s\n", $$1, $$2}'
@@ -63,3 +63,7 @@ lab-reset: ## Delete the lab and all its data
 
 brand: ## Apply branding/tokens.json: portal tokens.css + GLPI CSS preview
 	$(PY) branding/apply_branding.py --render
+
+brand-glpi: ## Apply the brand to the running lab GLPI (custom CSS on the root entity)
+	set -a && . lab/.env && set +a && $(PY) branding/apply_branding.py --glpi-url http://localhost:$${GLPI_PORT:-8090}/apirest.php \
+	  --admin-password "$${GLPI_ADMIN_PASSWORD:-glpi}" --app-token "$$WS_GLPI_APP_TOKEN"

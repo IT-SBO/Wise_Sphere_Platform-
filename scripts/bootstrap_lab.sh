@@ -52,6 +52,9 @@ trap restore EXIT
 python3 "$ROOT/glpi/provision_glpi.py" --url "$GLPI_URL" --admin-user glpi --admin-password "${GLPI_ADMIN_PASSWORD:-glpi}" \
   --svc-password "$WS_GLPI_SVC_PASSWORD" --app-token "$WS_GLPI_APP_TOKEN" --api-cidr 172.30.0.0/24 --svc-user svc-integration \
   --portal-app-token "$WS_GLPI_PORTAL_APP_TOKEN" --lab-users-password "$LAB_USERS_PASSWORD" --out glpi-ids.json >/dev/null
+echo "== GLPI: WISE Group brand (colours, logo, Cairo font)"
+python3 "$ROOT/branding/apply_branding.py" --glpi-url "$GLPI_URL" --admin-password "${GLPI_ADMIN_PASSWORD:-glpi}" \
+  --app-token "$WS_GLPI_APP_TOKEN" | tail -1 || echo "   (brand not applied - run: make brand-glpi)"
 restore; trap - EXIT
 
 echo "== Zabbix: provisioning"

@@ -158,7 +158,8 @@ grep LAB_USERS_PASSWORD lab/.env
 | Load test (500 alerts) | `make lab-load-test` |
 | Instant test alert | `docker exec ws-zabbix-server zabbix_sender -z 127.0.0.1 -s cl001-kwi-lab -k ws.test.1 -o 1` (recovery: `-o 0`) |
 | Unit tests | `make unit` |
-| Apply brand colours / logo | edit `branding/tokens.json`, put logos in `branding/assets/`, run `make brand` |
+| Apply brand colours / logo | edit `branding/tokens.json`, put logos in `branding/assets/`, run `make brand`, then `make image` (portal) and `make brand-glpi` (GLPI) |
+| GLPI shows the old GLPI look | `make brand-glpi` (lab must be running), then reload the page with Ctrl+F5 |
 
 ---
 
