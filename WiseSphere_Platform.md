@@ -1,6 +1,6 @@
 # WiseSphere Platform – Project Reference
 
-One page with everything needed to install, run, test and continue the WiseSphere platform.
+One page with everything needed to install, run, test, brand and continue the WiseSphere platform.
 Keep it next to the code: `WiseSphere_Platform.md` in the repository root.
 
 | Item | Value |
@@ -11,7 +11,7 @@ Keep it next to the code: `WiseSphere_Platform.md` in the repository root.
 | Same folder in Ubuntu (WSL) | `/mnt/d/mnt/WiseSphere Platform` |
 | Requirements | WS-PRD-001 v2.0 (`docs/WiseSphere_PRD_and_Implementation_Plan.docx`) |
 | Development document | `docs/WiseSphere_Development_Document.docx` (v1.2 – section 9 = design system) |
-| Design | WISE Group brand from wisegroup.trade – one file: `branding/tokens.json` |
+| Design | WISE Group brand from wisegroup.trade – one file: `branding/tokens.json` – all steps in **section 9** |
 | Windows guide (detail) | `docs/RUN_ON_WINDOWS.md` |
 
 ---
@@ -117,6 +117,7 @@ make lab-bootstrap
 make lab-test
 ```
 Expected: `make lab-bootstrap` ends with `== lab ready`, and `make lab-test` ends with **29/29 checks passed**.
+`make lab-up` also rebuilds the branded portal and Zabbix images, and `make lab-bootstrap` applies the GLPI design (section 9).
 
 ### Stop (data kept)
 ```bash
@@ -141,7 +142,7 @@ make lab-reset
 | Grafana (NOC wall, optional) | http://localhost:3000 | `admin` / `grep GRAFANA_ADMIN_PASSWORD lab/.env` – start with `cd lab && docker compose --profile grafana up -d --build grafana` |
 | SMS + firewall mock | http://localhost:8099/messages · http://localhost:8099/fw/blocks | – |
 
-All sites show the WISE Group design. If one still shows the old look, see the table in section 5.
+All sites show the WISE Group design (section 9). If one still shows the old look, press Ctrl+F5, then see section 9.7.
 
 Portal password (generated per machine, same for the three users):
 ```bash
@@ -162,9 +163,10 @@ grep LAB_USERS_PASSWORD lab/.env
 | Load test (500 alerts) | `make lab-load-test` |
 | Instant test alert | `docker exec ws-zabbix-server zabbix_sender -z 127.0.0.1 -s cl001-kwi-lab -k ws.test.1 -o 1` (recovery: `-o 0`) |
 | Unit tests | `make unit` |
-| Apply brand colours / logo | edit `branding/tokens.json`, put logos in `branding/assets/`, run `make brand`, then `make image` (portal), `make brand-glpi` (GLPI), and in `lab/`: `docker compose build zabbix-web` and `docker compose --profile grafana build grafana` |
-| Zabbix or Grafana show the old look | In `lab/`: `docker compose up -d --build zabbix-web` (Grafana: `docker compose --profile grafana up -d --build grafana`), then Ctrl+F5 |
-| GLPI shows the old GLPI look | `make brand-glpi` (lab must be running), then reload the page with Ctrl+F5 |
+| Generate all brand files from `branding/tokens.json` | `make brand` (steps in section 9.5) |
+| Apply the design to GLPI | `make brand-glpi` |
+| Rebuild branded portal + Zabbix | `make lab-up` |
+| Rebuild branded Grafana | `cd lab && docker compose --profile grafana up -d --build grafana` |
 
 ---
 
@@ -218,8 +220,150 @@ device-role templates, platform self-monitoring, hub/spoke stacks, backups, deve
 | `lab/` | Local lab (Docker Compose) |
 | `hub/`, `spoke/` | Production hub and client-site stacks |
 | `glpi/`, `zabbix/`, `wazuh/`, `grafana/` | Provisioning and product configuration; brand files for GLPI, Zabbix and Grafana |
-| `branding/` | Design: colours, fonts, logos (`tokens.json`, `assets/`) and the script that applies them everywhere |
+| `branding/` | Design: colours, fonts, logos (`tokens.json`, `assets/`), CSS templates and `apply_branding.py` (section 9) |
+| `glpi/branding/`, `zabbix/web/`, `grafana/Dockerfile` + `grafana/branding/`, `web/portal/public/brand/` | Generated brand files and the branded Zabbix / Grafana images |
 | `ops/` | Backups, WireGuard, restore drill |
 | `tests/` | Unit, end-to-end, load and PoC tests |
 | `docs/` | PRD, development document, Windows guide, screenshots |
 | `poc/` | The original proof of concept |
+
+---
+
+## 9. Design (WISE Group) – all steps
+
+All four websites of the platform – **WiseSphere portal, GLPI, Zabbix and Grafana** – use the WISE Group design
+taken from **wisegroup.trade**. Everything comes from **one file**: `branding/tokens.json` (plus the logo files in
+`branding/assets/`). Full details: development document, section 9.
+
+### 9.1 The design in short
+
+| Item | Value | Used for |
+|---|---|---|
+| WISE orange | `#dc552d` (hover `#b8431f`) | Buttons, links, active menu marker, orange lines under headers |
+| Dark grey | `#424242` | Portal menu bar, outline buttons |
+| Near black | `#252223` | Text, GLPI / Zabbix side menu, footer, sign-in backgrounds |
+| Heading grey | `#4a4a4a` | Page and card titles |
+| Light grey | `#f4f4f4` | Page background |
+| Green / amber / red | `#7a9c59` / `#e08a00` / `#b20000` | Status only: healthy, at risk, critical |
+| Font | **Cairo** (English and Arabic) | Everything; installed with the code, no internet font service |
+| Corners | 3 px (square look) | Buttons, fields, cards |
+| Logo | WiSE GROUP (`branding/assets/logo.svg`) | Headers and sign-in pages; a white-text copy is made automatically for dark menus |
+
+### 9.2 What each website looks like and where it comes from
+
+| Website | What you see | Made by |
+|---|---|---|
+| Portal http://localhost:8089 | White bar with the logo + dark grey menu bar, orange **New request** button, dark sign-in page, Arabic mirrored | `web/portal` (built into the portal image) |
+| GLPI http://localhost:8090 | Dark sign-in page with the logo, dark side menu with orange marker, orange buttons; client users see the same | CSS sent to GLPI by `make brand-glpi` (also done by `make lab-bootstrap`) + files in `glpi/branding/` |
+| Zabbix http://localhost:8081 | Dark sign-in page with the logo, dark side menu, orange buttons and links, footer “WISE Group · WiseSphere”, name “WiseSphere NOC” | Image `wisesphere/zabbix-web` built from `zabbix/web/` (`make lab-up` builds it) |
+| Grafana http://localhost:3000 | WISE icon, dark/orange sign-in background, light theme, WiSE GROUP header and brand colours on the NOC dashboard | Image `wisesphere/grafana` built from `grafana/` |
+
+> Grafana's own buttons and menus stay blue, and its sign-in page still says “Welcome to Grafana”; changing those needs
+> Grafana Enterprise. In Zabbix the design is on the default **Blue** theme; in GLPI a user who picks a dark palette keeps it.
+
+### 9.3 Get the design on this PC (after every `git pull`)
+
+In Ubuntu:
+```bash
+cd "/mnt/d/mnt/WiseSphere Platform"
+```
+```bash
+git pull origin main
+```
+```bash
+source .venv/bin/activate
+```
+Portal, GLPI and Zabbix (`make lab-up` rebuilds the portal and Zabbix images; the first time takes a few minutes):
+```bash
+make lab-up
+```
+```bash
+make lab-bootstrap
+```
+Grafana (optional):
+```bash
+cd lab && docker compose --profile grafana up -d --build grafana && cd ..
+```
+Then open each website and press **Ctrl+F5** once, so the browser drops the old look.
+
+### 9.4 Check the design
+
+| Website | Check |
+|---|---|
+| Portal | Sign-in page is dark on the left with **WiseSphere**; after sign-in the menu bar is dark grey and the current page has an orange top line; switch to **العربية** – the layout mirrors |
+| GLPI | Sign-in page is dark with the WiSE GROUP logo; menu on the left is dark; **Add** / **Save** buttons are orange; browser tab shows the WISE icon |
+| Zabbix | Sign-in page is dark with the logo; footer says “WISE Group · WiseSphere”; **Apply** buttons are orange |
+| Grafana | Sign-in page has the WISE icon on a dark/orange background; the NOC dashboard starts with the WiSE GROUP header |
+
+### 9.5 Change the colours, logo or font
+
+1. Put the new logo in `branding/assets/logo.svg` (and a square icon in `branding/assets/favicon.png`, 192 × 192).
+2. Edit the colours, corner radius or fonts in `branding/tokens.json` (keep the names, change only the values).
+3. Generate all brand files for the four websites:
+```bash
+make brand
+```
+   It must list: `tokens.css`, `web/portal/public/brand`, `glpi/branding`, `zabbix/web/brand`, `grafana/branding`.
+
+4. Rebuild and restart portal and Zabbix:
+```bash
+make lab-up
+```
+5. Send the new design to GLPI:
+```bash
+make brand-glpi
+```
+6. Grafana (if used):
+```bash
+cd lab && docker compose --profile grafana up -d --build grafana && cd ..
+```
+7. Press **Ctrl+F5** on each website and do the checks in 9.4 (also in Arabic).
+8. Save the change in Git (on a branch, then a pull request to `main`):
+```bash
+git add branding web/portal glpi/branding zabbix/web grafana && git commit -m "Brand: <what changed>"
+```
+
+> Never edit the generated files by hand (`web/portal/src/tokens.css`, `web/portal/public/brand/`, `glpi/branding/`,
+> `zabbix/web/brand/`, `grafana/branding/`) – `make brand` overwrites them.
+> To change only the **look** of GLPI or Zabbix (not the colours), edit `branding/glpi-custom.css.tmpl` or
+> `branding/zabbix-custom.css.tmpl`, then repeat steps 3–7. Portal layout: `web/portal/src/styles.css`.
+
+### 9.6 Production hub
+
+1. Portal: build the image with the new design and publish it under the name in `PORTAL_IMAGE` (`hub/.env`), e.g.:
+```bash
+make image && docker tag wisesphere/portal:dev registry.example.com/wisesphere/portal:1.0.1 && docker push registry.example.com/wisesphere/portal:1.0.1
+```
+   Put the new tag in `PORTAL_IMAGE` in `hub/.env`.
+
+2. Zabbix web and Grafana are built on the hub itself (after `git pull`):
+```bash
+cd hub && docker compose --profile app build grafana && docker compose --profile zabbix build zabbix-web
+```
+3. Start everything (`docker compose --profile app up -d` on HUB-APP-01, `docker compose --profile zabbix up -d` on HUB-ZBX-01).
+4. Apply the GLPI design from a staff PC (the GLPI API is open only to `STAFF_CIDRS`), with the values from `hub/.env`:
+```bash
+python3 branding/apply_branding.py --glpi-url https://<GLPI_HOST>/apirest.php --admin-password <GLPI admin password> --app-token <WS_GLPI_APP_TOKEN>
+```
+
+### 9.7 Design problems and fixes
+
+| Symptom | Fix |
+|---|---|
+| A website still shows the old look | Press **Ctrl+F5**; if still old, do 9.3 again |
+| GLPI looks like standard GLPI (yellow / blue) | `make brand-glpi` (lab must be running), then Ctrl+F5 |
+| GLPI shows colours but the GLPI logo, or a plain font | GLPI container was started before the update: `cd lab && docker compose up -d glpi && cd ..`, then Ctrl+F5 |
+| Zabbix still shows the red ZABBIX logo | `cd lab && docker compose up -d --build zabbix-web && cd ..` |
+| Grafana shows the Grafana logo | `cd lab && docker compose --profile grafana up -d --build grafana && cd ..` |
+| `make brand` stops with an error (`KeyError` or *unknown tokens*) | A name in `tokens.json` was changed or removed – restore the name, change only the value |
+| `make brand` does not list the Cairo font files | Run `cd web/portal && npm ci && cd ../..`, then `make brand` again |
+| Portal in Arabic shows a plain font | Ctrl+F5; the Cairo font is part of the portal image – run `make lab-up` |
+
+### 9.8 Design history
+
+| Date | Change | Pull request |
+|---|---|---|
+| 23 Nov 2026 | Portal restyled to wisegroup.trade (colours, Cairo, two-bar header, sign-in page, logo) | [IT-SBO/Wise_Sphere_Platform-#5](https://github.com/IT-SBO/Wise_Sphere_Platform-/pull/5) |
+| 23 Nov 2026 | Same design on GLPI (sign-in, staff screens, client helpdesk) | [IT-SBO/Wise_Sphere_Platform-#6](https://github.com/IT-SBO/Wise_Sphere_Platform-/pull/6) |
+| 23 Nov 2026 | Zabbix and Grafana branded; every portal form polished | [IT-SBO/Wise_Sphere_Platform-#7](https://github.com/IT-SBO/Wise_Sphere_Platform-/pull/7) |
+| 23 Nov 2026 | Development document v1.2 with section 9 “Design system and branding” | [IT-SBO/Wise_Sphere_Platform-#8](https://github.com/IT-SBO/Wise_Sphere_Platform-/pull/8) |
