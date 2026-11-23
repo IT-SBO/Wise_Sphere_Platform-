@@ -105,7 +105,11 @@ services:
       GLPI_DB_USER: glpi
       GLPI_DB_PASSWORD: ${GLPI_DB_PASSWORD}
       TZ: ${TZ}
-    volumes: [glpi-data:/var/glpi]
+    volumes:
+      - glpi-data:/var/glpi
+      # WiseSphere / WISE Group brand files (logos, favicon, Cairo font) used by the custom CSS - branding/apply_branding.py
+      - ../glpi/branding:/var/www/glpi/public/wisesphere:ro
+      - ../glpi/branding/favicon.png:/var/www/glpi/public/pics/favicon.ico:ro
     networks: [edge, backend]
     labels:
       - traefik.enable=true

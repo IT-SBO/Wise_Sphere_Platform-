@@ -11,19 +11,24 @@ without touching the platform code.
 | `assets/favicon.png` | 64×64 browser icon |
 | `tokens.json` | Colours, fonts (Latin + Arabic), brand name, tagline |
 
-The values in `tokens.json` follow the **WISE Group** brand (https://wisegroup.trade): orange `#dc552d`, dark grey `#424242` navigation, `#252223` text, Cairo font, square corners, and the WiSE GROUP logo in `assets/logo.svg`. `--render` also copies the logo and favicon to `web/portal/public/brand/`.
+The values in `tokens.json` follow the **WISE Group** brand (https://wisegroup.trade): orange `#dc552d`, dark grey `#424242` navigation, `#252223` text, Cairo font, square corners, and the WiSE GROUP logo in `assets/logo.svg`. `--render` also copies the logo and favicon to `web/portal/public/brand/` and writes `glpi/branding/` (logo, white-text logo for the dark GLPI menu, favicon, Cairo font files).
 
 ## Apply
 ```bash
 python3 branding/apply_branding.py --render          # preview: branding/build/glpi-custom.css
-python3 branding/apply_branding.py --glpi-url http://localhost:8090/apirest.php --admin-password <glpi admin>
+python3 branding/apply_branding.py --glpi-url http://localhost:8090/apirest.php --admin-password <glpi admin> --app-token <WS_GLPI_APP_TOKEN>
 ```
+In the lab, `make lab-bootstrap` does this automatically and `make brand-glpi` repeats it.
+
+GLPI reads the fonts and logos from `/wisesphere/`: `glpi/branding/` is mounted into the GLPI container
+(`/var/www/glpi/public/wisesphere`, read-only) by `lab/docker-compose.yml` and `hub/docker-compose.yml`, and
+`favicon.png` replaces GLPI's browser icon. Users who choose a dark GLPI palette keep it (only the logo and font change).
 
 ## Where the brand appears
 | Surface | Mechanism | Status |
 |---|---|---|
-| GLPI client portal + staff UI | Custom CSS on the root entity, inherited by every client entity | Script ready |
+| GLPI sign-in, staff UI, client helpdesk | Custom CSS on the root entity, inherited by every client entity, + `glpi/branding/` files | Done (WISE Group style) |
 | Grafana | `BRAND_NAME` → `GF_BRANDING_APP_TITLE`. Custom logo on login/menu needs Grafana Enterprise | Title only in OSS |
 | SMS and ticket texts | Brand name in SMS and ticket texts from the integration service | Done ("WiseSphere …") |
 | Monthly client report (RPT-01) | Will read `tokens.json` + logo | When WBS 5.3 is built |
-| Custom web portal | **Not in Release 1** (PRD R-06, §4.4: GLPI + Grafana are the client portal) | Needs a scope decision if the design includes one |
+| WiseSphere portal (Angular) | `web/portal/src/tokens.css` + `web/portal/public/brand/` | Done (WISE Group style) |

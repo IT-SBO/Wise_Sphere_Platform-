@@ -6,7 +6,9 @@
 
 Where the brand shows up:
   WiseSphere portal (Angular)         web/portal/src/tokens.css (CSS variables) + logo         <- this script
-  GLPI 11 (staff UI + GLPI portal)    custom CSS on the root entity, inherited by client entities   <- this script
+  GLPI 11 (staff UI, login, helpdesk) custom CSS on the root entity, inherited by client entities   <- this script
+                                      + glpi/branding/ (logos, favicon, Cairo font files) mounted into the
+                                      GLPI container at /var/www/glpi/public/wisesphere (lab + hub compose)
   Grafana 13 OSS                      GF_BRANDING_APP_TITLE (hub/.env BRAND_NAME). Custom logos on the
                                       login page and menu are a Grafana Enterprise feature in OSS 13.
   SMS / ticket texts                  brand name in integration-service messages ("WiseSphere ...")
@@ -18,6 +20,7 @@ import argparse
 import base64
 import json
 import mimetypes
+import re
 import sys
 from pathlib import Path
 
@@ -36,19 +39,48 @@ def data_uri(path: Path) -> str:
 
 
 def render(tokens: dict) -> str:
+    """GLPI custom CSS. Logos and fonts are referenced as files under /wisesphere/ (see write_glpi_assets)."""
     c = tokens["colors"]
-    logo = HERE / tokens.get("logo", "")
-    logo_css = ""
-    if tokens.get("logo") and logo.is_file():
-        uri = data_uri(logo)
-        logo_css = (f".glpi-logo, .navbar-brand .glpi-logo, .page-anonymous .glpi-logo {{ background-image: url('{uri}') !important;"
-                    " background-size: contain; background-repeat: no-repeat; background-position: center; }}")
     values = {**c, "primary_rgb": rgb(c["primary"]), "font_family": tokens["font_family"],
-              "font_family_arabic": tokens["font_family_arabic"], "logo_css": logo_css}
+              "font_family_arabic": tokens["font_family_arabic"], "radius": tokens.get("radius", "6px"), "logo_css": ""}
     css = (HERE / "glpi-custom.css.tmpl").read_text()
     for k, v in values.items():
         css = css.replace("{{" + k + "}}", str(v))
+    missing = sorted(set(re.findall(r"{{(\w+)}}", css)))
+    if missing:
+        raise SystemExit(f"glpi-custom.css.tmpl uses unknown tokens: {missing}")
+    if len(css.encode()) > 60_000:  # glpi_entities.custom_css_code is a TEXT column (64 KB)
+        raise SystemExit(f"GLPI CSS is {len(css)} bytes - too big for GLPI (max ~64 KB)")
     return css
+
+
+GLPI_ASSETS = HERE.parent / "glpi/branding"
+FONTS = HERE.parent / "web/portal/node_modules/@fontsource/cairo/files"
+
+
+def write_glpi_assets(tokens: dict) -> None:
+    """Files GLPI serves from /wisesphere/: logo (dark text), logo-light (white text, for the dark menu), favicon, Cairo."""
+    GLPI_ASSETS.mkdir(parents=True, exist_ok=True)
+    c = tokens["colors"]
+    logo = HERE / tokens.get("logo", "")
+    if tokens.get("logo") and logo.is_file():
+        svg = logo.read_text()
+        (GLPI_ASSETS / "logo.svg").write_text(svg)
+        light = HERE / tokens.get("logo_dark", "")
+        if tokens.get("logo_dark") and light.is_file() and light != logo:
+            (GLPI_ASSETS / "logo-light.svg").write_text(light.read_text())
+        else:  # derive: the dark text colour of the logo becomes white
+            (GLPI_ASSETS / "logo-light.svg").write_text(re.sub(re.escape(c["text"]), "#FFFFFF", svg, flags=re.I))
+    fav = HERE / tokens.get("favicon", "")
+    if tokens.get("favicon") and fav.is_file():
+        (GLPI_ASSETS / "favicon.png").write_bytes(fav.read_bytes())
+    if FONTS.is_dir():  # Cairo from the portal's @fontsource package (cd web/portal && npm ci)
+        for script in ("latin", "arabic"):
+            for w in (400, 700):
+                src = FONTS / f"cairo-{script}-{w}-normal.woff2"
+                if src.is_file():
+                    (GLPI_ASSETS / f"cairo-{script}-{w}.woff2").write_bytes(src.read_bytes())
+    print(f"wrote GLPI brand files to {GLPI_ASSETS}: {', '.join(sorted(p.name for p in GLPI_ASSETS.iterdir()))}")
 
 
 def render_portal_tokens(tokens: dict) -> str:
@@ -91,6 +123,7 @@ def main() -> int:
         if tokens.get(key) and src.is_file():
             (public / f"{name}{src.suffix}").write_bytes(src.read_bytes())
             print(f"copied {src.name} -> {public / (name + src.suffix)}")
+    write_glpi_assets(tokens)
     if a.render or not a.glpi_url:
         return 0
     from provision_glpi import Glpi  # noqa: E402
