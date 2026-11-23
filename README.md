@@ -10,8 +10,8 @@ Release-1 platform: multi-client, deduplicated, storm-safe, SLA-aware, secured, 
 >
 > **Development document:** [`docs/WiseSphere_Development_Document.docx`](docs/WiseSphere_Development_Document.docx) – architecture, code, APIs, set-up, testing, security and the development guide.
 >
-> Design and logo: everything visual lives in [`branding/`](branding/README.md). Current colours are placeholders;
-> drop in the final files and run one command.
+> Design and logo: everything visual lives in [`branding/`](branding/README.md). The portal follows the WISE Group brand
+> (wisegroup.trade); change `branding/tokens.json` and run `make brand`.
 
 ## What is in the box
 

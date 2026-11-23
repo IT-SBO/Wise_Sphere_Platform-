@@ -336,7 +336,7 @@ add(H1('7. Integration service (C#)'),
 // 8
 add(H1('8. WiseSphere portal (Angular + ASP.NET Core)'),
   P('One container serves the Angular app as static files and the API under `/api`. Users sign in with their GLPI login. The back end opens a GLPI session for that user and keeps it on the server; the browser only receives an HttpOnly cookie with a random session id.'),
-  ...img('portal-02-dashboard-noc.png', 560, 'Figure 2 – Staff dashboard: KPIs, client health, tickets nearest to SLA breach (placeholder colours).'),
+  ...img('portal-02-dashboard-noc.png', 560, 'Figure 2 – Staff dashboard: KPIs, client health, tickets nearest to SLA breach (WISE Group brand).'),
   H2('8.1 Users and what they see'),
   table(['User', 'GLPI set-up', 'Portal view'], [
     ['NOC / SOC staff', 'Technician (or stronger) profile on the root entity, recursive', 'All clients, client health matrix, all problems, “Open in GLPI” link'],

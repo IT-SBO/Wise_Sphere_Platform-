@@ -191,7 +191,7 @@ device-role templates, platform self-monitoring, hub/spoke stacks, backups, deve
 | Item | Owner |
 |---|---|
 | Management sign-off on the portal (change to PRD R-06) | Executive Management |
-| Final design and logo → `branding/` | Design |
+| Design sign-off (portal now follows wisegroup.trade; logo/colours in `branding/`) | Design |
 | SMS provider (D-04), credential vault (D-06), hosting (D-02) | Solutions Architect / Management |
 | Wazuh server deployment (Phase 4) | SOC Engineer |
 | Tunnel-cut test TC-05 and restore drill TC-11 on the real hub | NOC / DevOps |

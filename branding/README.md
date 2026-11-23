@@ -11,7 +11,7 @@ without touching the platform code.
 | `assets/favicon.png` | 64×64 browser icon |
 | `tokens.json` | Colours, fonts (Latin + Arabic), brand name, tagline |
 
-The values in `tokens.json` today are **placeholders**.
+The values in `tokens.json` follow the **WISE Group** brand (https://wisegroup.trade): orange `#dc552d`, dark grey `#424242` navigation, `#252223` text, Cairo font, square corners, and the WiSE GROUP logo in `assets/logo.svg`. `--render` also copies the logo and favicon to `web/portal/public/brand/`.
 
 ## Apply
 ```bash

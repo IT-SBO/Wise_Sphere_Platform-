@@ -61,7 +61,7 @@ def render_portal_tokens(tokens: dict) -> str:
         lines.append(f"  --ws-{k.replace('_', '-')}: {v};")
     lines += [f"  --ws-primary-rgb: {rgb(c['primary'])};", f"  --ws-font: {tokens['font_family']};",
               f"  --ws-font-arabic: {tokens['font_family_arabic']};", f"  --ws-logo: {logo_url};",
-              f"  --ws-brand-name: '{tokens['brand_name']}';", "}"]
+              f"  --ws-brand-name: '{tokens['brand_name']}';", f"  --ws-radius: {tokens.get('radius', '6px')};", "}"]
     return "\n".join(lines) + "\n"
 
 
@@ -83,6 +83,14 @@ def main() -> int:
     portal_tokens = HERE.parent / "web/portal/src/tokens.css"
     portal_tokens.write_text(render_portal_tokens(tokens))
     print(f"rendered {portal_tokens}")
+    # logo + favicon as files for the portal (<img>, <link rel=icon>)
+    public = HERE.parent / "web/portal/public/brand"
+    public.mkdir(parents=True, exist_ok=True)
+    for key, name in (("logo", "logo"), ("favicon", "favicon")):
+        src = HERE / tokens.get(key, "")
+        if tokens.get(key) and src.is_file():
+            (public / f"{name}{src.suffix}").write_bytes(src.read_bytes())
+            print(f"copied {src.name} -> {public / (name + src.suffix)}")
     if a.render or not a.glpi_url:
         return 0
     from provision_glpi import Glpi  # noqa: E402

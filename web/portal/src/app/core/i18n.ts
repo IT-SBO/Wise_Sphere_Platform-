@@ -4,6 +4,7 @@ import { Injectable, Pipe, PipeTransform, inject, signal } from '@angular/core';
 /** English / Arabic UI (NFR-LNG-01). Arabic switches the page to right-to-left. Add keys to both dictionaries. */
 const EN: Record<string, string> = {
   'app.tagline': 'Managed network & security services',
+  'app.overline': 'WISE Group managed services',
   'nav.dashboard': 'Dashboard', 'nav.tickets': 'Tickets', 'nav.monitoring': 'Monitoring', 'nav.newTicket': 'New request',
   'auth.title': 'Sign in', 'auth.username': 'Username', 'auth.password': 'Password', 'auth.submit': 'Sign in',
   'auth.invalid': 'Wrong username or password.', 'auth.locked': 'Too many attempts. Wait a minute and try again.', 'auth.logout': 'Sign out',
@@ -43,6 +44,7 @@ const EN: Record<string, string> = {
 };
 const AR: Record<string, string> = {
   'app.tagline': 'خدمات مُدارة للشبكات والأمن',
+  'app.overline': 'الخدمات المُدارة من WISE Group',
   'nav.dashboard': 'لوحة المتابعة', 'nav.tickets': 'التذاكر', 'nav.monitoring': 'المراقبة', 'nav.newTicket': 'طلب جديد',
   'auth.title': 'تسجيل الدخول', 'auth.username': 'اسم المستخدم', 'auth.password': 'كلمة المرور', 'auth.submit': 'دخول',
   'auth.invalid': 'اسم المستخدم أو كلمة المرور غير صحيحة.', 'auth.locked': 'محاولات كثيرة. انتظر دقيقة ثم حاول مجدداً.', 'auth.logout': 'تسجيل الخروج',
