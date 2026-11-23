@@ -10,7 +10,8 @@ const REPO = require('path').resolve(__dirname, '../..');
 const OUT = path.join(REPO, 'docs/WiseSphere_Development_Document.docx');
 const W = 9638; // A4 content width in DXA (margins 1134)
 const FONT = 'Arial';
-const NAVY = '1D273B', BLUE = '1F4FB3', GREY = '66728A', HEAD_FILL = 'E8EEF8', ZEBRA = 'F6F8FB';
+// WISE Group brand (branding/tokens.json): text #252223, orange #dc552d, grey #777777, light orange table heads
+const NAVY = '252223', BLUE = 'DC552D', GREY = '777777', HEAD_FILL = 'FBECE7', ZEBRA = 'F7F7F7';
 
 // ---------------------------------------------------------------- helpers
 const runs = (text, opts = {}) => {
@@ -29,7 +30,8 @@ const runs = (text, opts = {}) => {
   return parts;
 };
 const P = (text, opts = {}) => brk(new Paragraph({ children: runs(text, opts.run), spacing: { after: 120 }, ...opts.para }));
-const H1 = (t) => brk(new Paragraph({ heading: HeadingLevel.HEADING_1, children: [new TextRun(t)], pageBreakBefore: true }));
+const H1 = (t) => brk(new Paragraph({ heading: HeadingLevel.HEADING_1, children: [new TextRun(t)], pageBreakBefore: true,
+  border: { bottom: { style: BorderStyle.SINGLE, size: 12, color: BLUE, space: 6 } } }));
 const H2 = (t) => brk(new Paragraph({ heading: HeadingLevel.HEADING_2, children: [new TextRun(t)] }));
 const H3 = (t) => brk(new Paragraph({ heading: HeadingLevel.HEADING_3, children: [new TextRun(t)] }));
 const B = (text, level = 0) => brk(new Paragraph({ children: runs(text), numbering: { reference: 'bullets', level }, spacing: { after: 60 } }));
@@ -39,15 +41,15 @@ const N = (text) => { if (newList) { listInstance++; newList = false; }
   return new Paragraph({ children: runs(text), numbering: { reference: 'steps', level: 0, instance: listInstance }, spacing: { after: 60 } }); };
 const brk = (x) => { newList = true; return x; };
 const CODE = (lines) => lines.map((l, i) => new Paragraph({
-  children: [new TextRun({ text: l || ' ', font: 'Consolas', size: 18, color: '1D273B' })],
-  shading: { type: ShadingType.CLEAR, fill: 'F2F4F8', color: 'auto' },
+  children: [new TextRun({ text: l || ' ', font: 'Consolas', size: 18, color: NAVY })],
+  shading: { type: ShadingType.CLEAR, fill: 'F4F4F4', color: 'auto' },
   spacing: { after: i === lines.length - 1 ? 160 : 0, line: 260 },
   indent: { left: 120, right: 120 },
 }));
 const NOTE = (text) => brk(new Paragraph({
   children: runs(text, { size: 20 }),
-  shading: { type: ShadingType.CLEAR, fill: 'FFF7E0', color: 'auto' },
-  border: { left: { style: BorderStyle.SINGLE, size: 18, color: 'F59F00', space: 8 } },
+  shading: { type: ShadingType.CLEAR, fill: 'FDF3EF', color: 'auto' },
+  border: { left: { style: BorderStyle.SINGLE, size: 18, color: BLUE, space: 8 } },
   spacing: { before: 80, after: 160 }, indent: { left: 160 },
 }));
 
@@ -72,6 +74,20 @@ function table(header, rows, widths) {
   });
 }
 const gap = () => new Paragraph({ children: [], spacing: { after: 120 } });
+// rows: [hex, token, name, use] - the first column is painted in the colour
+function swatches(rows) {
+  newList = true;
+  const widths = [10, 14, 18, 20, 38].map((w) => Math.round((w / 100) * W));
+  widths[4] += W - widths.reduce((a, b) => a + b, 0);
+  const c = (i, children, fill) => new TableCell({ width: { size: widths[i], type: WidthType.DXA }, margins: { top: 60, bottom: 60, left: 100, right: 100 },
+    shading: fill ? { type: ShadingType.CLEAR, fill, color: 'auto' } : undefined, children });
+  const t = (x, o = {}) => [new Paragraph({ children: runs(x, { size: 18, ...o }), spacing: { after: 20 } })];
+  return new Table({ width: { size: W, type: WidthType.DXA }, columnWidths: widths, rows: [
+    new TableRow({ tableHeader: true, children: ['Colour', 'Hex', 'Token', 'Name', 'Used for'].map((h, i) => c(i, t(h, { bold: true, color: NAVY }), HEAD_FILL)) }),
+    ...rows.map(([hex, token, name, use]) => new TableRow({ cantSplit: true, children: [
+      c(0, t(' '), hex.replace('#', '').toUpperCase()), c(1, t('`' + hex + '`')), c(2, t('`' + token + '`')), c(3, t(name)), c(4, t(use))] })),
+  ] });
+}
 function img(file, widthPx, caption) {
   newList = true;
   const buf = fs.readFileSync(path.join(REPO, 'docs/screenshots', file));
@@ -89,21 +105,29 @@ const content = [];
 const add = (...xs) => xs.flat().forEach((x) => content.push(x));
 
 // Cover
+const LOGO = fs.readFileSync(path.join(REPO, 'docs/screenshots/brand-logo.png'));
 add(
-  new Paragraph({ spacing: { before: 2600, after: 120 }, children: [new TextRun({ text: 'WiseSphere', size: 64, bold: true, color: NAVY })] }),
-  new Paragraph({ spacing: { after: 120 }, children: [new TextRun({ text: 'Managed Services (MSP / MSSP) Platform', size: 32, color: BLUE })] }),
+  new Paragraph({ spacing: { before: 1200, after: 600 }, children: [new ImageRun({ type: 'png', data: LOGO, transformation: { width: 178, height: 98 } })] }),
+  new Paragraph({ spacing: { after: 120 }, children: [new TextRun({ text: 'Wise', size: 64, color: '424242' }), new TextRun({ text: 'Sphere', size: 64, bold: true, color: BLUE })] }),
+  new Paragraph({ spacing: { after: 120 }, children: [new TextRun({ text: 'MANAGED SERVICES (MSP / MSSP) PLATFORM', size: 26, bold: true, color: GREY, characterSpacing: 40 })] }),
   new Paragraph({ spacing: { after: 600 }, children: [new TextRun({ text: 'Development Document – Release 1', size: 40, bold: true, color: NAVY })] }),
   table(['Item', 'Detail'], [
     ['Document ID', 'WS-DEV-001'],
-    ['Version / status', 'v1.1 – Release 1 feature-complete in the lab; open decisions listed in section 15'],
-    ['Date', '22 November 2026'],
+    ['Version / status', 'v1.2 – Release 1 feature-complete in the lab, WISE Group design applied; open decisions listed in section 16'],
+    ['Date', '23 November 2026'],
     ['Audience', 'In-house C# / Angular development team, Solutions Architect, DevOps / integration engineer, QA'],
     ['Based on', 'WS-PRD-001 v2.0 (PRD & Implementation Plan), WiseSphere Execution Plan, PoC summary and setup guide (Nov 2026)'],
     ['Source code', 'Git repository `IT-SBO/Wise_Sphere_Platform-`, branch `claude/trusting-knuth-hpcbuz`'],
     ['Technology decision', 'C# / .NET 10 (back end) and Angular 22 (front end), maintained by the in-house team'],
   ], [28, 72]),
   gap(),
-  NOTE('**Design and logo:** the portal and GLPI follow the WISE Group brand (wisegroup.trade): orange #dc552d, dark grey navigation, Cairo font, WiSE GROUP logo. All colours, fonts and the logo come from one file (`branding/tokens.json`), so a design change needs no code change (section 8.7).'),
+  NOTE('**Design and logo:** the portal, GLPI, Zabbix and Grafana follow the WISE Group brand (wisegroup.trade): orange #dc552d, dark grey navigation, Cairo font, WiSE GROUP logo. All colours, fonts and logos come from one file (`branding/tokens.json`), so a design change needs no code change (section 9).'),
+  H3('Revision history'),
+  table(['Version', 'Date', 'Changes'], [
+    ['v1.0', '21 Nov 2026', 'First issue: architecture, integration service, portal, set-up, security, testing'],
+    ['v1.1', '22 Nov 2026', 'Device-role templates, platform self-monitoring, monthly report (RPT-01), approved containment (SOC-04), Windows guide'],
+    ['v1.2', '23 Nov 2026', 'WISE Group design on every surface: new section 9 (design system and branding), portal restyle, GLPI, Zabbix and Grafana branding, new screenshots; this document restyled in the brand colours'],
+  ], [12, 16, 72]),
 );
 
 // TOC
@@ -119,19 +143,21 @@ add(H1('1. Purpose and scope'),
   H2('1.1 What WiseSphere does'),
   P('WiseSphere turns WISE Group’s network-solutions company into a managed services provider. One central **hub** watches, protects and supports many client networks. Each client site gets a small **spoke** appliance. Every monitoring alert and security event becomes a ticket in the right client’s queue automatically, measured against the client’s contractual SLA.'),
   H2('1.2 Scope of this release'),
-  table(['In this document (built and tested)', 'Not yet built (planned, see section 15)'], [
+  table(['In this document (built and tested)', 'Not yet built (planned, see section 16)'], [
     ['Integration service (C#): Zabbix → GLPI, Wazuh → GLPI, SLA watch, CSAT review, on-call SMS', 'Wazuh deployment itself and per-client index security (Phase 4, needs the Wazuh VM)'],
     ['Approved firewall block with auto-expiry (SOC-04): FortiGate and generic HTTP adapters', 'Executive report (RPT-02) and ERP billing link (Release 2)'],
     ['WiseSphere portal (Angular + ASP.NET Core): dashboard, tickets, monitoring, requests, monthly report (RPT-01), EN/AR', 'Patch tool (D-05), credential vault (D-06)'],
     ['Zabbix device-role templates (NOC-02) and platform self-monitoring (NFR-OPS-01)', 'Hub HA / DR site (Release 2)'],
     ['Hub and spoke stacks, provisioning scripts, Grafana NOC wall, backups and restore drill', ''],
     ['Lab with automated end-to-end, load and PoC tests; Windows run guide', ''],
+    ['WISE Group design on the portal, GLPI, Zabbix and Grafana from one brand file (section 9)', 'Wazuh dashboard branding (with the Wazuh deployment)'],
   ], [55, 45]),
   H2('1.3 How to read it'),
-  B('Developers new to the project: sections 2, 3, 5 and 13.'),
-  B('DevOps / operations: sections 9, 10 and 12.'),
-  B('QA: section 11. Security reviewers: section 10.'),
-  B('Management: sections 2, 11 and 15.'),
+  B('Developers new to the project: sections 2, 3, 5 and 14.'),
+  B('Designers and front-end developers: section 9 (design system and branding).'),
+  B('DevOps / operations: sections 10, 11 and 13.'),
+  B('QA: section 12. Security reviewers: section 11.'),
+  B('Management: sections 2, 12 and 16.'),
 );
 
 // 2
@@ -147,7 +173,8 @@ add(H1('2. Solution overview and key decisions'),
     ['DD-05', 'One **client code** `CLnnn` links every tool', 'PRD §4.7; one key for GLPI entity, Zabbix groups, Wazuh labels, WireGuard subnet'],
     ['DD-06', 'Business rules are pure C# with no I/O (`WiseSphere.Core`)', 'Fast, deterministic unit tests; rules can be changed safely'],
     ['DD-07', 'Everything as code in Git (Compose, provisioning, dashboards, brand tokens)', 'NFR-OPS-04; repeatable environments; change control (SOP-06)'],
-    ['DD-08', 'A custom portal in Release 1', '**Scope change to PRD R-06** – needs management sign-off (section 15)'],
+    ['DD-08', 'A custom portal in Release 1', '**Scope change to PRD R-06** – needs management sign-off (section 16)'],
+    ['DD-09', 'WISE Group corporate design on every product, generated from one brand file (`branding/tokens.json`)', 'One look for clients and staff; a design change needs no code change (section 9)'],
   ], [9, 41, 50]),
   H2('2.2 Main flows'),
   N('A monitored device fails → Zabbix raises a problem → the Zabbix action calls the integration service webhook → the service finds the client’s GLPI entity and opens a ticket (or adds a follow-up, or groups it into an alert-storm ticket) → disaster-level problems page the NOC by SMS.'),
@@ -207,6 +234,7 @@ add(H1('4. Technology stack and versions'),
     ['YamlDotNet', '17.1.0', 'Reads `config/*.yaml` in the integration service'],
     ['xUnit', '2.9.3', 'Unit tests'],
     ['Python (tooling)', '3.11+', 'Provisioning scripts and end-to-end tests: requests, PyYAML, cryptography, pytest'],
+    ['Cairo font', '`@fontsource/cairo` 5.3.0', 'Brand font (Latin + Arabic), self-hosted – no external font service, allowed by the strict CSP'],
   ], [30, 22, 48]),
 );
 
@@ -228,7 +256,11 @@ add(H1('5. Repository structure'),
     ['`hub/`, `spoke/`, `lab/`', 'Docker Compose stacks for production hub, client sites and the lab'],
     ['`ops/`', 'Backup, WireGuard hub set-up, restore drill'],
     ['`scripts/`', 'Lab bootstrap, new client site (`new_spoke.py`), .NET SDK in a container (`dotnet.sh`)'],
-    ['`branding/`', 'Brand tokens and the script that applies them to the portal and GLPI'],
+    ['`branding/`', 'Brand tokens (`tokens.json`), logos, CSS templates and `apply_branding.py`, which generates every brand file below (section 9)'],
+    ['`web/portal/public/brand/`, `web/portal/src/tokens.css`', 'Portal logo, favicon and CSS variables (generated)'],
+    ['`glpi/branding/`', 'GLPI logos, favicon and Cairo font files, mounted into the GLPI container (generated)'],
+    ['`zabbix/web/`', '`Dockerfile` of the branded Zabbix web image; `brand/` holds its generated files'],
+    ['`grafana/Dockerfile`, `grafana/branding/`', 'Branded Grafana image and its generated files'],
     ['`docs/`, `poc/`', 'Documents, screenshots, the archived PoC'],
   ], [36, 64]),
 );
@@ -373,31 +405,111 @@ add(H1('8. WiseSphere portal (Angular + ASP.NET Core)'),
   H2('8.6 Monthly service report (RPT-01)'),
   P('Reports → choose client and month → **Print / Save as PDF**. The page has a print layout (no navigation, A4). It shows tickets opened / solved / still open, solved within SLA, average time to resolve, satisfaction, tickets by priority and by source, monitoring problems and total problem time, alert storms, security incidents, the devices with most incidents and the list of P1 incidents. Client users can produce the report for their own company only. Figures come from GLPI with the user’s own rights and from Zabbix (read-only).'),
   ...img('portal-09-monthly-report.png', 460, 'Figure 6 – Monthly service report (lab data).'),
-  H2('8.7 Brand: portal, GLPI, Zabbix and Grafana'),
-  P('GLPI gets the same look as the portal: custom CSS on the root entity (inherited by every client entity and also used by the sign-in page) plus the files in `glpi/branding/` (logos, favicon, Cairo font), which Docker Compose mounts into the GLPI container at `/wisesphere/`. The lab bootstrap applies it automatically; `make brand-glpi` applies it again.'),
-  ...img('glpi-01-login.png', 460, 'Figure 6a – GLPI sign-in page in the WISE Group style.'),
-  ...img('glpi-02-ticket.png', 520, 'Figure 6b – GLPI ticket in the WISE Group style (dark menu, orange accents).'),
-  P('To change the design:'),
-  N('Put the logo files in `branding/assets/` (`logo.svg`, `logo-dark.svg`, `favicon.png`).'),
-  N('Edit `branding/tokens.json` – colours, Latin and Arabic fonts, brand name.'),
-  N('Run `make brand`. This regenerates `web/portal/src/tokens.css`, `web/portal/public/brand/`, `glpi/branding/` and the GLPI brand CSS.'),
-  N('If the design changes the layout (not only colours), edit `web/portal/src/styles.css` and the page templates. Component logic does not change.'),
-  N('Rebuild the image (`make image`) and deploy. Apply the GLPI CSS with `make brand-glpi` (lab) or `python3 branding/apply_branding.py --glpi-url … --app-token …` (hub).'),
-  P('Zabbix and Grafana are built as small branded images on top of the official ones (`zabbix/web/Dockerfile`, `grafana/Dockerfile`); Docker Compose builds them. Zabbix gets the full look (colours, logo, footer, font). Grafana OSS gets the WISE icon, favicon, sign-in background, a logo header on the dashboards and brand colours in the panels; its buttons and menus keep Grafana colours because Grafana OSS has no theme setting.'),
-  ...img('zabbix-01-problems.png', 520, 'Figure 6c – Zabbix in the WISE Group style.'),
-  ...img('grafana-01-noc.png', 520, 'Figure 6d – Grafana NOC overview with the WISE Group header.'),
+  H2('8.7 Design'),
+  P('The portal follows the WISE Group design system described in section 9: colours, fonts and logo come from `tokens.css` (generated), layout and components from `styles.css`.'),
 );
 
 // 9
-add(H1('9. Environments, set-up and deployment'),
-  H2('9.1 Environments'),
+add(H1('9. Design system and branding (WISE Group)'),
+  P('Every screen of the platform – the WiseSphere portal, GLPI, Zabbix and Grafana – uses the WISE Group corporate design taken from **wisegroup.trade**: orange accent, dark grey navigation, Cairo font, square corners and the WiSE GROUP logo. Clients and staff therefore see one company, whichever tool they open.'),
+  P('All design values live in **one file**, `branding/tokens.json`, plus the logo files in `branding/assets/`. The script `branding/apply_branding.py` (run with `make brand`) generates every brand file the four products need. Nothing generated is edited by hand.'),
+  H2('9.1 Source of truth'),
+  table(['File', 'Contents'], [
+    ['`branding/tokens.json`', 'Brand and company name, tagline, colours, corner radius, Latin and Arabic font, logo and favicon file names'],
+    ['`branding/assets/logo.svg`', 'WiSE GROUP logo (orange “WiSE”, dark “GROUP”), from wisegroup.trade. A white-text version for dark backgrounds is derived automatically'],
+    ['`branding/assets/favicon.png`', 'Square browser icon (192 × 192)'],
+    ['`branding/glpi-custom.css.tmpl`', 'GLPI brand stylesheet template'],
+    ['`branding/zabbix-custom.css.tmpl`', 'Zabbix brand stylesheet template'],
+    ['`branding/apply_branding.py`', 'Generates all files in section 9.5; applies the GLPI stylesheet through the GLPI API'],
+  ], [32, 68]),
+  ...img('brand-logo.png', 180, 'Figure 9.1 – WiSE GROUP logo (branding/assets/logo.svg).'),
+  H2('9.2 Colours and typography'),
+  swatches([
+    ['#dc552d', 'primary', 'WISE orange', 'Buttons, links, active menu marker, heading underlines, orange lines under headers'],
+    ['#b8431f', 'primary_dark', 'Dark orange', 'Hover and pressed state of orange buttons and links'],
+    ['#424242', 'accent', 'Dark grey', 'Portal navigation bar, secondary (outline) buttons, product name “Wise”'],
+    ['#252223', 'text', 'Near black', 'Body text, GLPI / Zabbix side menu, footer, sign-in backgrounds'],
+    ['#4a4a4a', 'heading', 'Heading grey', 'Page and card titles'],
+    ['#777777', 'muted', 'Mid grey', 'Secondary text, table captions, user menu'],
+    ['#f4f4f4', 'surface', 'Light grey', 'Page background'],
+    ['#7a9c59', 'success', 'Green', 'Healthy client, solved ticket, KPI top line'],
+    ['#e08a00', 'warning', 'Amber', 'Attention / SLA at risk'],
+    ['#b20000', 'danger', 'Red', 'Critical, breached, errors, containment panel'],
+  ]),
+  gap(),
+  table(['Item', 'Rule'], [
+    ['Font', '**Cairo** (Latin and Arabic) – the font of wisegroup.trade. Self-hosted from `@fontsource/cairo` (weights 400, 600, 700); no call to an external font service. Fallback: Segoe UI, Tahoma, Arial'],
+    ['Headings', 'Bold, grey `#4a4a4a`. Page titles have a 4 px orange bar at the start; card titles are uppercase with a 2 px orange underline (no uppercase in Arabic)'],
+    ['Overline', 'Small uppercase orange label above a title (e.g. “WISESPHERE” above “Sign in”), letter spacing 0.12 em'],
+    ['Navigation', 'Uppercase, bold, 0.88 rem, white on dark grey; the current page has an orange top border'],
+    ['Corner radius', '3 px everywhere (`radius` token) – square look as on the website'],
+    ['Numbers', 'Tabular figures in tables and KPI tiles'],
+  ], [20, 80]),
+  H2('9.3 Layout and components (portal)'),
+  table(['Component', 'Design'], [
+    ['Header', 'Two bars, like wisegroup.trade: a white brand bar (WiSE GROUP logo | “Wise**Sphere**”, language switch, user name, sign out) and a dark grey navigation bar with an orange “New request” button at the end. Sticky at the top'],
+    ['Footer', 'Near-black bar with a 3 px orange top line: “© WISE Group · WiseSphere …”. Always at the bottom of the window'],
+    ['Sign-in page', 'Split screen: dark brand panel with “WISE GROUP” overline, “Wise**Sphere**” and the tagline; white card with the logo, orange top edge and the form'],
+    ['Buttons', 'Square, bold, uppercase. Primary = orange (dark orange on hover); ghost = dark grey outline that fills on hover; danger = red'],
+    ['Forms', 'Cards with a 3 px orange top edge. Fields 2.6 rem high, thin grey border, orange border on focus; dropdowns with an orange arrow (mirrored in Arabic)'],
+    ['Cards', 'White, 1 px border `#e1e1e1`, very light shadow, 3 px radius'],
+    ['KPI tiles', 'White tile with a coloured top line (green / amber / red), uppercase caption, large bold number'],
+    ['Tables', 'Light grey header row, uppercase bold column names, thin row lines, light orange row hover'],
+    ['Badges', 'Square: P1 red, P2 orange, P3 yellow, P4 blue; status green when solved'],
+    ['Monthly report', 'Logo and “Wise**Sphere**” at the top, orange rule under the header, print layout for A4'],
+    ['Right-to-left', 'All rules use logical properties, so the Arabic layout is an exact mirror (logo on the right, “New request” on the left)'],
+  ], [18, 82]),
+  ...img('portal-02-dashboard-noc.png', 520, 'Figure 9.2 – Portal dashboard (staff): two-bar header, KPI tiles, client health, tables.'),
+  ...img('portal-01-login.png', 460, 'Figure 9.3 – Portal sign-in page.'),
+  H2('9.4 How each product is branded'),
+  table(['Product', 'How', 'What the user sees'], [
+    ['WiseSphere portal', '`web/portal/src/tokens.css` (CSS variables) and `web/portal/public/brand/` (logo, favicon), both generated; layout in `styles.css`. Built into the portal image (`make image`)', 'The full design described above'],
+    ['GLPI 11', 'Custom CSS on the root entity, applied by `apply_branding.py` through the GLPI API and inherited by every client entity (also used on the sign-in page). Logos, favicon and Cairo files in `glpi/branding/`, mounted read-only into the container at `/wisesphere/`', 'Dark sign-in page with the logo; dark side menu with the white logo and orange markers; white top bar with an orange line; orange buttons and links; Cairo font; WISE browser icon'],
+    ['Zabbix 8.0 web', 'Image `wisesphere/zabbix-web` (`zabbix/web/Dockerfile`) built on the official image: the default Blue theme is recoloured (`brand/theme.sed`), `brand/wisesphere.css` is appended, logos and footer via `local/conf/brand.conf.php`, Cairo font, favicon. Server name “WiseSphere NOC”', 'Same look as GLPI: dark sign-in page, dark side menu with orange marker, orange buttons and links, footer “WISE Group · WiseSphere”'],
+    ['Grafana 13 OSS', 'Image `wisesphere/grafana` (`grafana/Dockerfile`): replaces Grafana’s icon, favicon and sign-in background (also the hashed copies). Light theme by default. `apply_branding.py` adds a logo header panel and brand colours to the dashboards', 'WISE icon and sign-in background, dashboards with the WiSE GROUP header and brand colours. Buttons and menus stay Grafana blue (Grafana OSS has no theme setting)'],
+    ['Wazuh dashboard', 'Not yet – done with the Wazuh deployment (Phase 4)', '–'],
+  ], [16, 50, 34]),
+  ...img('glpi-01-login.png', 460, 'Figure 9.4 – GLPI sign-in page.'),
+  ...img('glpi-02-ticket.png', 520, 'Figure 9.5 – GLPI ticket.'),
+  ...img('zabbix-01-problems.png', 520, 'Figure 9.6 – Zabbix problems.'),
+  ...img('grafana-01-noc.png', 520, 'Figure 9.7 – Grafana NOC overview with the WISE header.'),
+  H2('9.5 Generated files'),
+  P('Created by `make brand` (`python3 branding/apply_branding.py --render`). They are committed to Git so that a fresh clone works without Node.js; never edit them by hand.'),
+  table(['File / folder', 'Used by'], [
+    ['`web/portal/src/tokens.css`', 'Portal stylesheet (CSS variables `--ws-primary`, `--ws-radius`, …)'],
+    ['`web/portal/public/brand/logo.svg`, `favicon.png`', 'Portal header, sign-in page, report, browser icon'],
+    ['`branding/build/glpi-custom.css`', 'GLPI custom CSS (preview; the script sends it to GLPI)'],
+    ['`glpi/branding/`', 'GLPI container `/wisesphere/`: `logo.svg`, `logo-light.svg`, `favicon.png`, Cairo `.woff2`'],
+    ['`zabbix/web/brand/`', 'Zabbix image build: logos, fonts, `theme.sed`, `wisesphere.css`, `brand.conf.php`'],
+    ['`grafana/branding/`', 'Grafana image build: `icon.svg`, `login-bg.svg`, logos, favicon'],
+    ['`grafana/dashboards/*.json`', 'Brand colours and the logo header panel (id 9000) are written into the dashboards'],
+  ], [42, 58]),
+  H2('9.6 Changing the design'),
+  N('Put new logo files in `branding/assets/` (`logo.svg`; `favicon.png` square). Optional: `logo_dark` in `tokens.json` for a hand-made white-text logo.'),
+  N('Edit `branding/tokens.json` (colours, radius, fonts, names).'),
+  N('Run `make brand`. Check the output lists all four products.'),
+  N('Portal: `make image`, then restart `ws-portal` (`make lab-up` in the lab).'),
+  N('GLPI: `make brand-glpi` (lab) or `python3 branding/apply_branding.py --glpi-url … --admin-password … --app-token …` (hub). Users press Ctrl+F5.'),
+  N('Zabbix and Grafana: rebuild their images – `make lab-up` does it in the lab (`--build`); on the hub `docker compose build zabbix-web grafana` and `up -d`.'),
+  N('If the layout changes (not only colours), edit `web/portal/src/styles.css` or the two CSS templates; component logic does not change. Take screenshots in English and Arabic and update this document.'),
+  NOTE('Rules for new screens: use the tokens (`var(--ws-…)`), never hard-coded colours; use logical CSS properties for right-to-left; orange only for actions, links and markers – status colours (green, amber, red) only for status.'),
+  H2('9.7 Limits'),
+  B('Grafana OSS: buttons, menus and the “Welcome to Grafana” title keep Grafana’s look; changing them needs Grafana Enterprise.'),
+  B('Zabbix: only the default Blue theme is recoloured; the logo and footer show in every theme.'),
+  B('GLPI: users who choose a dark palette keep it (logo and font still change). The GLPI REST API must be reachable from where `apply_branding.py` runs.'),
+  B('The brand colours, font and logo were taken from wisegroup.trade; Marketing should confirm them (section 16.1).'),
+);
+
+// 10
+add(H1('10. Environments, set-up and deployment'),
+  H2('10.1 Environments'),
   table(['Environment', 'Purpose', 'How'], [
     ['Lab (developer laptop / CI)', 'Development, end-to-end and load tests', '`lab/docker-compose.yml`: GLPI, Zabbix, integration service, portal, simulated devices, SMS mock'],
     ['Staging', 'Upgrade and release testing, restore drill (TC-11)', '`hub/` stack, both profiles on one VM'],
     ['Production hub', 'Live service', '`hub/` stack: profile `app` on HUB-APP-01, `zabbix` on HUB-ZBX-01; Wazuh on HUB-WZH-01'],
     ['Client site', 'Monitoring collection', '`spoke/` stack installed by `spoke/install-spoke.sh`'],
   ], [22, 30, 48]),
-  H2('9.2 Lab quick start'),
+  H2('10.2 Lab quick start'),
   P('Needs Docker with Compose, Python 3.11+ and about 6 GB RAM (8 GB for Docker recommended). The .NET SDK and Node are optional: `scripts/dotnet.sh` runs the SDK in a container and the images build the Angular app themselves. **On Windows** use Docker Desktop with WSL 2 – step by step in `docs/RUN_ON_WINDOWS.md`.'),
   ...CODE(['pip install -r requirements.txt', 'make lab-up          # build images, start containers', 'make lab-bootstrap   # provision GLPI + Zabbix, start integration service and portal', 'make lab-test        # 29 end-to-end checks', 'make lab-load-test   # TC-09: 500 alerts', 'make lab-poc-test    # stop the agent -> ticket; start it -> solved']),
   table(['Service', 'Lab URL', 'Login'], [
@@ -407,7 +519,7 @@ add(H1('9. Environments, set-up and deployment'),
     ['Integration service', 'http://localhost:8088/readyz', 'Webhooks need `X-WS-Secret`'],
     ['SMS + firewall mock', 'http://localhost:8099/messages, /fw/blocks', 'Every SMS sent and every address blocked'],
   ], [22, 32, 46]),
-  H2('9.3 Production deployment (hub)'),
+  H2('10.3 Production deployment (hub)'),
   N('Provision the VMs (PRD §5.2) and harden the OS (CIS level 1). On HUB-APP-01 run `ops/wg-hub-setup.sh` (WireGuard runs on the host).'),
   N('Copy `hub/.env.example` to `hub/.env` (mode 600) and fill host names and secrets from the vault.'),
   N('Build and push the images from CI: `wisesphere/integration` and `wisesphere/portal` with a version tag; set `INTEGRATION_IMAGE` and `PORTAL_IMAGE`.'),
@@ -416,7 +528,7 @@ add(H1('9. Environments, set-up and deployment'),
   N('Start Zabbix (`--profile zabbix`) and run `zabbix/provision_zabbix.py --webhook-url https://<integration-host>/webhook/zbx-event --readonly-token-out …`; put the token in `ZABBIX_PORTAL_TOKEN`.'),
   N('Start the rest: `docker compose --profile app up -d`. Check `/readyz` of the integration service and sign in to the portal.'),
   N('Install `ops/backup-hub.sh` as a nightly timer and run the restore drill (`ops/restore-drill.md`) before go-live.'),
-  H2('9.4 Adding a client (SOP-01)'),
+  H2('10.4 Adding a client (SOP-01)'),
   N('Add the client and its sites to `config/tenants.yaml`; commit through a pull request.'),
   N('Re-run `glpi/provision_glpi.py` and `zabbix/provision_zabbix.py` (both are safe to run again).'),
   N('Register the client’s devices: `zabbix/add_hosts.py --csv devices.csv` (columns client, site, role, name, ip, optional glpi_asset). Each device gets its role template (`config/templates.yaml`), host group, tags and the site proxy.'),
@@ -427,8 +539,8 @@ add(H1('9. Environments, set-up and deployment'),
   N('Create the client’s GLPI users (client-manager profile on the client entity) – they can sign in to the portal at once.'),
 );
 
-// 10
-add(H1('10. Security'),
+// 11
+add(H1('11. Security'),
   table(['Control', 'Implementation', 'Requirement'], [
     ['No inbound port at client sites', 'Spoke starts the WireGuard tunnel; Zabbix proxy is active', 'NFR-SEC-01'],
     ['Webhook authentication', '`X-WS-Secret` with constant-time comparison + IP allow-list in Traefik', 'INT-05'],
@@ -447,9 +559,9 @@ add(H1('10. Security'),
   NOTE('Before go-live: enable MFA for all staff in GLPI, change every default password, and store all tokens in the credential vault (decision D-06).'),
 );
 
-// 11
-add(H1('11. Testing and quality'),
-  H2('11.1 Test levels'),
+// 12
+add(H1('12. Testing and quality'),
+  H2('12.1 Test levels'),
   table(['Level', 'What', 'Command', 'Result (22 Nov 2026)'], [
     ['Unit (C#)', 'Business rules: parsing, severity mapping, dedupe, storm, recovery, SLA tiers and business hours, CSAT, containment', '`make unit`', '50 / 50 pass'],
     ['Unit (Python)', 'Config files, Wazuh script output vs schema, brand CSS, compose secrets', '`make unit`', '6 / 6 pass'],
@@ -459,7 +571,7 @@ add(H1('11. Testing and quality'),
     ['PoC scenario', 'Stop the agent container → ticket; start → solved', '`make lab-poc-test`', 'Ticket after 297 s (Zabbix 3-min wait), solved 56 s after recovery'],
     ['CI', 'Build, unit tests, images, Angular build, compose validation', '`.github/workflows/ci.yml`', 'Runs on every push'],
   ], [16, 40, 20, 24]),
-  H2('11.2 End-to-end checks against the PRD test plan'),
+  H2('12.2 End-to-end checks against the PRD test plan'),
   table(['PRD test', 'Check', 'Lab result'], [
     ['TC-01', 'Problem → ticket in client entity, SLA attached, source Monitoring, NOC group', '1.2 s (target ≤ 60 s)'],
     ['TC-02', 'Recovery → ticket solved automatically', 'Pass'],
@@ -474,14 +586,14 @@ add(H1('11. Testing and quality'),
     ['RPT-01', 'Monthly report for own client; other client refused', 'Pass'],
     ['TC-05, TC-11', 'Tunnel cut, restore drill', 'Need the real hub and pilot site – not yet run'],
   ], [16, 60, 24]),
-  H2('11.3 Quality rules'),
+  H2('12.3 Quality rules'),
   B('C# builds with **warnings as errors** and the .NET analyzers at “latest-recommended”.'),
   B('Every business-rule change comes with a unit test; every bug fix starts with a failing test.'),
   B('Run `make check` before every pull request; run `make lab-test` for changes that touch the integration path or the portal.'),
 );
 
-// 12
-add(H1('12. Operations'),
+// 13
+add(H1('13. Operations'),
   table(['Topic', 'How'], [
     ['Health', '`/healthz` and `/readyz` on the integration service; `/healthz` on the portal; Docker restart policy'],
     ['Self-monitoring', 'Zabbix host `wisesphere-platform`: HTTP checks of the integration service, portal and GLPI every minute (ticket in CL000 after 3 min without HTTP 200); one “site proxy not seen for 3 minutes” P1 per client site, ticketed in the client’s own queue (PRD §5.4)'],
@@ -496,27 +608,27 @@ add(H1('12. Operations'),
   ], [18, 82]),
 );
 
-// 13
-add(H1('13. Development guide'),
-  H2('13.1 Tooling'),
+// 14
+add(H1('14. Development guide'),
+  H2('14.1 Tooling'),
   B('Visual Studio 2022+, Rider or VS Code with the C# Dev Kit; Node 22 and the Angular CLI for front-end work.'),
   B('Without a local SDK: `scripts/dotnet.sh build|test` runs the .NET 10 SDK in Docker.'),
   B('Front-end live reload: start the lab, then `make web-dev` (Angular on :4200, `/api` proxied to the lab portal on :8089).'),
-  H2('13.2 Branching and change control'),
+  H2('14.2 Branching and change control'),
   B('Work on a feature branch; open a pull request to `main`; CI must be green; one reviewer approves (SOP-06).'),
   B('Never edit GLPI or Zabbix configuration by hand where a provisioning script owns it – change the script or `config/*.yaml` and re-run it.'),
   B('Tag releases (`v1.0.0`); images are tagged with the same version.'),
-  H2('13.3 Coding standards'),
+  H2('14.3 Coding standards'),
   table(['Area', 'Standard'], [
     ['C#', 'Nullable enabled, records for data, `sealed` classes, async all the way with `CancellationToken`, no business rules in endpoints – they belong in `WiseSphere.Core`'],
     ['Logging', 'Structured messages with named properties (`{Client}`, `{Action}`); never log secrets or full payloads with personal data'],
     ['HTTP to GLPI', 'Only through `GlpiClient`; add a typed method instead of raw calls in services'],
     ['Angular', 'Standalone components, `inject()`, signals for state, `@if/@for` control flow, lazy routes, no business rules in templates'],
     ['Texts', 'Every visible string through `t` with keys in both English and Arabic'],
-    ['Styling', 'Use tokens (`var(--ws-…)`) and logical properties; never hard-code brand colours'],
+    ['Styling', 'Use tokens (`var(--ws-…)`) and logical properties; never hard-code brand colours. Follow the component rules in section 9.3 (square corners, uppercase bold buttons, orange accents only for actions and markers). Generated files are never edited by hand'],
     ['Security', 'New API endpoints go in the signed-in group; validate input lengths; writes need the CSRF header (automatic via the interceptor)'],
   ], [16, 84]),
-  H2('13.4 Common changes – where to edit'),
+  H2('14.4 Common changes – where to edit'),
   table(['Change', 'Edit', 'Test'], [
     ['Change the alert-storm threshold', '`WS__Integration__StormThreshold`', '–'],
     ['Change how severity maps to priority', '`ZabbixDecider.MapSeverity`', '`Severity_mapping_INT01`'],
@@ -525,11 +637,13 @@ add(H1('13. Development guide'),
     ['New SMS provider', '`SmsSender` (body/headers)', 'Lab SMS mock or provider sandbox'],
     ['New portal page', '`web/portal/src/app/pages/`, route in `app.routes.ts`, API in `WiseSphere.Portal`', 'Manual + e2e check'],
     ['New text in the portal', '`core/i18n.ts` (EN and AR)', 'Switch language and check RTL'],
+    ['Change brand colours, font or logo', '`branding/tokens.json`, `branding/assets/`, then `make brand` and rebuild (section 9.6)', 'Screenshots of each surface, EN + AR'],
+    ['Change the look of GLPI / Zabbix only', '`branding/glpi-custom.css.tmpl` / `branding/zabbix-custom.css.tmpl`', '`make brand-glpi` / rebuild `zabbix-web`'],
   ], [30, 44, 26]),
 );
 
-// 14
-add(H1('14. Requirements traceability'),
+// 15
+add(H1('15. Requirements traceability'),
   table(['Requirement', 'Implemented in', 'Verified by'], [
     ['ITSM-01 entity per client', '`glpi/provision_glpi.py`', 'TC-01, TC-10'],
     ['ITSM-02 SLA per package and calendar', '`config/sla.yaml`, GLPI SLM/SLA/rules', 'TC-01 (SLA attached), TC-06'],
@@ -552,24 +666,25 @@ add(H1('14. Requirements traceability'),
     ['DSH-01/02/03 dashboards', 'Portal dashboard + monitoring; Grafana NOC wall', 'Screenshots, TC-10'],
     ['NFR-PERF-01 ≤ 60 s', 'Parallel design', '1.2 s; TC-09 p95 0.49 s'],
     ['NFR-LNG-01 Arabic / English', 'Portal i18n with RTL', 'Figure 3'],
+    ['Corporate identity (WISE Group brand)', '`branding/` + generated files on portal, GLPI, Zabbix, Grafana', 'Screenshots in section 9 and Appendix A'],
     ['NFR-OPS-03/04 pinned versions, config as code', 'Compose, `.env.example`, Git', 'CI'],
   ], [34, 40, 26]),
 );
 
-// 15
-add(H1('15. Open decisions, known limitations and next steps'),
-  H2('15.1 Decisions needed'),
+// 16
+add(H1('16. Open decisions, known limitations and next steps'),
+  H2('16.1 Decisions needed'),
   table(['#', 'Decision', 'Needed for', 'Owner'], [
     ['DD-08', 'Approve the custom portal as a change to PRD R-06', 'Go-live of the portal', 'Executive Management'],
     ['D-04', 'SMS / voice provider', 'Real paging (lab uses a mock)', 'Solutions Architect'],
     ['D-02', 'Hub hosting (in-region)', 'Production deployment', 'Executive Management'],
     ['D-06', 'Credential vault', 'Storing tokens, spoke bundles', 'SOC Engineer'],
     ['D-05', 'Patch / remote-management tool', 'Selling the Gold package', 'Executive Management'],
-    ['–', 'Design sign-off (WISE Group brand applied)', 'Branded portal and GLPI', 'Marketing / Design'],
+    ['–', 'Design sign-off: WISE Group brand taken from wisegroup.trade; confirm colours and logo with Marketing, provide official logo files (SVG) if different', 'Go-live look of portal, GLPI, Zabbix, Grafana', 'Marketing / Design'],
     ['–', 'Least-privilege GLPI profiles: confirm Technician for the service account; create a “Client manager” profile', 'Production accounts', 'Solutions Architect'],
     ['–', 'Containment per client: written opt-in, firewall type, allow-list; test with the client firewall team', 'Enabling SOC-04 for a client', 'SOC Engineer + client'],
   ], [10, 46, 26, 18]),
-  H2('15.2 Known limitations'),
+  H2('16.2 Known limitations'),
   B('Portal sessions are kept in memory: a restart signs users out, and a second portal instance would need a shared store (e.g. Redis). One instance is enough for Release 1 (25 clients).'),
   B('The SLA and CSAT de-duplication state is a small JSON file in the service’s data volume; with more than one integration-service instance it must move to a shared store.'),
   B('The Grafana Zabbix plugin downloads at first start; hubs without internet access need it pre-installed.'),
@@ -578,8 +693,10 @@ add(H1('15. Open decisions, known limitations and next steps'),
   B('The monthly report is produced with the browser’s “Save as PDF”; automatic e-mailing of reports and the executive report (RPT-02) are not built.'),
   B('The Wazuh deployment itself and per-client index security are not built (Phase 4, needs the Wazuh VM).'),
   B('Tests TC-05 (tunnel cut) and TC-11 (restore drill) need the real hub and pilot site.'),
-  H2('15.3 Next steps'),
-  N('Management sign-off on the portal scope; receive the design and logo; apply them (section 8.6).'),
+  B('Grafana OSS keeps its own button and menu colours and the “Welcome to Grafana” title; full Grafana branding needs Grafana Enterprise.'),
+  B('Zabbix is branded in its default “Blue” theme; a user who picks another Zabbix theme sees Zabbix colours (logo and footer stay). GLPI users on a dark palette keep it.'),
+  H2('16.3 Next steps'),
+  N('Management sign-off on the portal scope and on the WISE Group design (section 9); replace the logo files if Marketing provides official ones.'),
   N('Choose the SMS provider and adapt `SmsSender` if its API differs.'),
   N('Phase 4: Wazuh deployment and per-client index security; enable containment for the pilot (log-only first, then FortiGate).'),
   N('Executive report (RPT-02) and monthly report e-mailing.'),
@@ -587,10 +704,20 @@ add(H1('15. Open decisions, known limitations and next steps'),
 );
 
 // Appendix
-add(H1('Appendix A – Portal screens'),
-  ...img('portal-01-login.png', 520, 'Figure 7 – Sign-in page.'),
-  ...img('portal-05-monitoring.png', 520, 'Figure 8 – Monitoring: current problems for the user’s clients.'),
-  ...img('portal-08-new-request-arabic.png', 520, 'Figure 9 – New request form in Arabic.'),
+add(H1('Appendix A – Screens in the WISE Group design'),
+  H2('A.1 WiseSphere portal'),
+  ...img('portal-01-login.png', 520, 'Figure A1 – Portal sign-in page.'),
+  ...img('portal-03-tickets.png', 520, 'Figure A2 – Ticket list (staff).'),
+  ...img('portal-05-monitoring.png', 520, 'Figure A3 – Monitoring: current problems for the user’s clients.'),
+  ...img('portal-06-dashboard-client.png', 520, 'Figure A4 – Client user dashboard.'),
+  ...img('portal-08-new-request-arabic.png', 520, 'Figure A5 – New request form in Arabic (right-to-left).'),
+  H2('A.2 GLPI'),
+  ...img('glpi-03-tickets.png', 520, 'Figure A6 – GLPI ticket list.'),
+  ...img('glpi-04-client.png', 520, 'Figure A7 – GLPI as seen by a client user (inherits the brand from the root entity).'),
+  H2('A.3 Zabbix and Grafana'),
+  ...img('zabbix-02-login.png', 460, 'Figure A8 – Zabbix sign-in page.'),
+  ...img('zabbix-03-hosts.png', 520, 'Figure A9 – Zabbix hosts.'),
+  ...img('grafana-02-login.png', 460, 'Figure A10 – Grafana sign-in page (WISE icon and background).'),
 );
 
 // ---------------------------------------------------------------- document
@@ -600,7 +727,7 @@ const doc = new Document({
   title: 'WiseSphere Development Document',
   description: 'WS-DEV-001 – Release 1',
   styles: {
-    default: { document: { run: { font: FONT, size: 21, color: '1D273B' }, paragraph: { spacing: { line: 288, lineRule: LineRuleType.AUTO } } } },
+    default: { document: { run: { font: FONT, size: 21, color: NAVY }, paragraph: { spacing: { line: 288, lineRule: LineRuleType.AUTO } } } },
     paragraphStyles: [
       { id: 'Heading1', name: 'Heading 1', basedOn: 'Normal', next: 'Normal', quickFormat: true,
         run: { font: FONT, size: 34, bold: true, color: NAVY }, paragraph: { spacing: { before: 0, after: 200 }, keepNext: true, outlineLevel: 0 } },

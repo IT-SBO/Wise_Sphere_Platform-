@@ -10,7 +10,8 @@ Keep it next to the code: `WiseSphere_Platform.md` in the repository root.
 | Local folder (Windows) | `D:\mnt\WiseSphere Platform` |
 | Same folder in Ubuntu (WSL) | `/mnt/d/mnt/WiseSphere Platform` |
 | Requirements | WS-PRD-001 v2.0 (`docs/WiseSphere_PRD_and_Implementation_Plan.docx`) |
-| Development document | `docs/WiseSphere_Development_Document.docx` |
+| Development document | `docs/WiseSphere_Development_Document.docx` (v1.2 – section 9 = design system) |
+| Design | WISE Group brand from wisegroup.trade – one file: `branding/tokens.json` |
 | Windows guide (detail) | `docs/RUN_ON_WINDOWS.md` |
 
 ---
@@ -137,7 +138,10 @@ make lab-reset
 | GLPI | http://localhost:8090 | `glpi` / `glpi` |
 | Zabbix | http://localhost:8081 | `Admin` / `zabbix` |
 | Integration service | http://localhost:8088/readyz | – |
+| Grafana (NOC wall, optional) | http://localhost:3000 | `admin` / `grep GRAFANA_ADMIN_PASSWORD lab/.env` – start with `cd lab && docker compose --profile grafana up -d --build grafana` |
 | SMS + firewall mock | http://localhost:8099/messages · http://localhost:8099/fw/blocks | – |
+
+All sites show the WISE Group design. If one still shows the old look, see the table in section 5.
 
 Portal password (generated per machine, same for the three users):
 ```bash
@@ -187,13 +191,14 @@ grep LAB_USERS_PASSWORD lab/.env
 **Done and tested in the lab (29/29 end-to-end, 50/50 unit tests):**
 Zabbix → GLPI tickets (dedupe, storm grouping, auto-solve), Wazuh → SOC tickets, SLA SMS, CSAT review,
 portal (dashboard, tickets, monitoring, requests, monthly report, EN/AR), approved firewall block with expiry,
+WISE Group design on the portal, GLPI, Zabbix and Grafana (sign-in pages, menus, forms, logo, Cairo font),
 device-role templates, platform self-monitoring, hub/spoke stacks, backups, development document.
 
 **Open – decisions or real infrastructure needed:**
 | Item | Owner |
 |---|---|
 | Management sign-off on the portal (change to PRD R-06) | Executive Management |
-| Design sign-off (portal now follows wisegroup.trade; logo/colours in `branding/`) | Design |
+| Design sign-off: confirm the WISE Group colours / logo taken from wisegroup.trade; send official SVG logo if different | Marketing / Design |
 | SMS provider (D-04), credential vault (D-06), hosting (D-02) | Solutions Architect / Management |
 | Wazuh server deployment (Phase 4) | SOC Engineer |
 | Tunnel-cut test TC-05 and restore drill TC-11 on the real hub | NOC / DevOps |
@@ -212,7 +217,8 @@ device-role templates, platform self-monitoring, hub/spoke stacks, backups, deve
 | `web/portal/` | Angular front end |
 | `lab/` | Local lab (Docker Compose) |
 | `hub/`, `spoke/` | Production hub and client-site stacks |
-| `glpi/`, `zabbix/`, `wazuh/`, `grafana/` | Provisioning and product configuration |
+| `glpi/`, `zabbix/`, `wazuh/`, `grafana/` | Provisioning and product configuration; brand files for GLPI, Zabbix and Grafana |
+| `branding/` | Design: colours, fonts, logos (`tokens.json`, `assets/`) and the script that applies them everywhere |
 | `ops/` | Backups, WireGuard, restore drill |
 | `tests/` | Unit, end-to-end, load and PoC tests |
 | `docs/` | PRD, development document, Windows guide, screenshots |
