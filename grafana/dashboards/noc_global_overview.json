@@ -17,6 +17,22 @@
   "description": "NOC wall (R-15): DSH-01 health matrix, DSH-02 incidents, DSH-03 SLA countdown, CSAT and PRD §4.2 goals. Refresh 30 s (NFR-PERF-01).",
   "panels": [
     {
+      "id": 9000,
+      "type": "text",
+      "title": "",
+      "transparent": true,
+      "gridPos": {
+        "h": 3,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "options": {
+        "mode": "html",
+        "content": "<div style=\"display:flex;align-items:center;gap:18px;height:100%\"><img src=\"/public/img/wisesphere/logo.svg\" alt=\"WISE Group\" style=\"height:54px\"/><span style=\"font-size:26px;color:#424242\">Wise<b style=\"color:#dc552d\">Sphere</b></span><span style=\"margin-inline-start:auto;color:#777777;text-transform:uppercase;letter-spacing:.1em;font-weight:700\">NOC Global Overview</span></div>"
+      }
+    },
+    {
       "id": 1,
       "title": "Global Health Matrix (DSH-01)",
       "type": "table",
@@ -26,7 +42,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 0,
+        "y": 3,
         "w": 14,
         "h": 10
       },
@@ -63,15 +79,15 @@
                     "type": "value",
                     "options": {
                       "RED": {
-                        "color": "red",
+                        "color": "#b20000",
                         "index": 0
                       },
                       "AMBER": {
-                        "color": "orange",
+                        "color": "#e08a00",
                         "index": 1
                       },
                       "GREEN": {
-                        "color": "green",
+                        "color": "#7a9c59",
                         "index": 2
                       }
                     }
@@ -99,7 +115,7 @@
       },
       "gridPos": {
         "x": 14,
-        "y": 0,
+        "y": 3,
         "w": 5,
         "h": 5
       },
@@ -123,15 +139,15 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "red",
+                "color": "#b20000",
                 "value": null
               },
               {
-                "color": "orange",
+                "color": "#e08a00",
                 "value": 80
               },
               {
-                "color": "green",
+                "color": "#7a9c59",
                 "value": 90
               }
             ]
@@ -162,7 +178,7 @@
       },
       "gridPos": {
         "x": 19,
-        "y": 0,
+        "y": 3,
         "w": 5,
         "h": 5
       },
@@ -186,15 +202,15 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "red",
+                "color": "#b20000",
                 "value": null
               },
               {
-                "color": "orange",
+                "color": "#e08a00",
                 "value": 90
               },
               {
-                "color": "green",
+                "color": "#7a9c59",
                 "value": 95
               }
             ]
@@ -225,7 +241,7 @@
       },
       "gridPos": {
         "x": 14,
-        "y": 5,
+        "y": 8,
         "w": 5,
         "h": 5
       },
@@ -249,15 +265,15 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "red",
+                "color": "#b20000",
                 "value": null
               },
               {
-                "color": "orange",
+                "color": "#e08a00",
                 "value": 4
               },
               {
-                "color": "green",
+                "color": "#7a9c59",
                 "value": 4.3
               }
             ]
@@ -288,7 +304,7 @@
       },
       "gridPos": {
         "x": 19,
-        "y": 5,
+        "y": 8,
         "w": 5,
         "h": 5
       },
@@ -312,11 +328,11 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "red",
+                "color": "#b20000",
                 "value": null
               },
               {
-                "color": "green",
+                "color": "#7a9c59",
                 "value": 30
               }
             ]
@@ -347,7 +363,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 10,
+        "y": 13,
         "w": 24,
         "h": 12
       },
@@ -411,7 +427,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 22,
+        "y": 25,
         "w": 24,
         "h": 10
       },
@@ -449,11 +465,11 @@
                   "mode": "absolute",
                   "steps": [
                     {
-                      "color": "red",
+                      "color": "#b20000",
                       "value": null
                     },
                     {
-                      "color": "orange",
+                      "color": "#e08a00",
                       "value": 0
                     },
                     {
@@ -461,7 +477,7 @@
                       "value": 15
                     },
                     {
-                      "color": "green",
+                      "color": "#7a9c59",
                       "value": 60
                     }
                   ]

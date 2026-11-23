@@ -9,7 +9,7 @@ import { TranslatePipe } from '../core/i18n';
   selector: 'ws-new-ticket',
   imports: [FormsModule, TranslatePipe],
   template: `
-    <h1>{{ 'new.title' | t }}</h1>
+    <div class="page-head"><h1>{{ 'new.title' | t }}</h1></div>
     <form class="card form" (ngSubmit)="submit()">
       <label>{{ 'new.client' | t }}
         <select name="entity" [(ngModel)]="entityId" required>
