@@ -201,7 +201,9 @@ services:
   grafana:
     <<: *common
     profiles: [app]
-    image: grafana/grafana:${GRAFANA_TAG}
+    # official Grafana OSS image + WISE Group icon, favicon and sign-in background (grafana/Dockerfile)
+    image: wisesphere/grafana:${GRAFANA_TAG}
+    build: { context: ../grafana, args: { GRAFANA_TAG: "${GRAFANA_TAG}" } }
     container_name: ws-grafana
     environment:
       GF_SERVER_ROOT_URL: https://${GRAFANA_HOST}/
@@ -210,6 +212,7 @@ services:
       GF_USERS_ALLOW_SIGN_UP: "false"
       GF_AUTH_ANONYMOUS_ENABLED: "false"
       GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_USERS_DEFAULT_THEME: light
       GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
       GF_PLUGINS_PREINSTALL: ${GRAFANA_PLUGINS}
       GF_BRANDING_APP_TITLE: ${BRAND_NAME}
@@ -276,7 +279,9 @@ services:
   zabbix-web:
     <<: *common
     profiles: [zabbix]
-    image: zabbix/zabbix-web-nginx-pgsql:${ZABBIX_TAG}
+    # official Zabbix web image + WISE Group brand (zabbix/web/Dockerfile, files from branding/apply_branding.py)
+    image: wisesphere/zabbix-web:${ZABBIX_TAG}
+    build: { context: ../zabbix/web, args: { ZABBIX_TAG: "${ZABBIX_TAG}" } }
     container_name: ws-zabbix-web
     depends_on: [zabbix-server]
     environment:
@@ -285,6 +290,7 @@ services:
       POSTGRES_USER: zabbix
       POSTGRES_PASSWORD: ${ZABBIX_DB_PASSWORD}
       ZBX_SERVER_HOST: zabbix-server
+      ZBX_SERVER_NAME: WiseSphere NOC
       PHP_TZ: ${TZ}
     networks: [edge, backend]
     labels:

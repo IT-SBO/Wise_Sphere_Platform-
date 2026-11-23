@@ -54,7 +54,8 @@ html[dir='rtl'] .navbar a { text-transform: none; letter-spacing: 0; font-size: 
 .navbar a.active { border-top-color: var(--ws-primary); background: rgba(0, 0, 0, .18); }
 .navbar a.nav-cta { margin-inline-start: auto; background: var(--ws-primary); border-top-color: var(--ws-primary); }
 .navbar a.nav-cta:hover, .navbar a.nav-cta.active { background: var(--ws-primary-dark); border-top-color: var(--ws-primary-dark); }
-main { max-width: var(--ws-container); margin: 0 auto; padding: 2rem 1.25rem 3rem; }
+app-root { display: flex; flex-direction: column; min-height: 100vh; }
+main { flex: 1 0 auto; width: 100%; max-width: var(--ws-container); margin: 0 auto; padding: 2rem 1.25rem 3rem; }
 main.bare { max-width: none; padding: 0; }
 .site-footer { background: #252223; color: #bdbdbd; font-size: .82rem; padding: 1.1rem 0; border-top: 3px solid var(--ws-primary); }
 .page-head { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; margin-bottom: 1.25rem; }
@@ -79,6 +80,15 @@ html[dir='rtl'] .btn { text-transform: none; letter-spacing: 0; font-size: .92re
 .btn-block { width: 100%; }
 label { display: grid; gap: .3rem; font-weight: 600; font-size: .9rem; margin-bottom: .9rem; }
 input, select, textarea { font: inherit; font-weight: 400; padding: .55rem .7rem; border: 1px solid var(--ws-border); border-radius: var(--ws-radius); background: #fff; color: var(--ws-text); width: 100%; }
+select { appearance: none; -webkit-appearance: none; padding-inline-end: 2.2rem; cursor: pointer;
+  background: #fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' fill='none' stroke='%23dc552d' stroke-width='2'/%3E%3C/svg%3E") no-repeat right .8rem center; }
+html[dir='rtl'] select { background-position: left .8rem center; }
+input:not([type='checkbox']):not([type='radio']), select { min-height: 2.6rem; }
+input::placeholder, textarea::placeholder { color: #a6a6a6; }
+input:hover, select:hover, textarea:hover { border-color: #c4c4c4; }
+input:focus, select:focus, textarea:focus { border-color: var(--ws-primary); }
+.form.card, form.card { border-top: 3px solid var(--ws-primary); }
+.login-card.card { border-top-width: 4px; }
 input:focus, select:focus, textarea:focus, .btn:focus-visible { outline: 2px solid rgba(var(--ws-primary-rgb), .45); outline-offset: 1px; }
 .form { max-width: 720px; }
 .alert { background: #fdecec; color: var(--ws-danger); border: 1px solid #f0c0c0; border-inline-start: 4px solid var(--ws-danger); border-radius: var(--ws-radius); padding: .6rem .8rem; }
@@ -164,6 +174,8 @@ tbody tr:hover { background: rgba(var(--ws-primary-rgb), .03); }
 
 /* ---- report (RPT-01) */
 .inline-form { display: flex; gap: .75rem; align-items: flex-end; flex-wrap: wrap; }
+.inline-form label { align-self: flex-end; }
+.inline-form select { min-width: 7rem; }
 .inline-form label { margin: 0; }
 .report-brand { display: flex; align-items: center; gap: .8rem; font-size: 1.2rem; color: var(--ws-accent); }
 .report-brand img { height: 52px; width: auto; }

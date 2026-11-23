@@ -24,11 +24,15 @@ GLPI reads the fonts and logos from `/wisesphere/`: `glpi/branding/` is mounted 
 (`/var/www/glpi/public/wisesphere`, read-only) by `lab/docker-compose.yml` and `hub/docker-compose.yml`, and
 `favicon.png` replaces GLPI's browser icon. Users who choose a dark GLPI palette keep it (only the logo and font change).
 
+After changing tokens or logos: `make brand`, then rebuild the images (`make image`, and in `lab/`:
+`docker compose build zabbix-web` / `docker compose --profile grafana build grafana`) and run `make brand-glpi`.
+
 ## Where the brand appears
 | Surface | Mechanism | Status |
 |---|---|---|
 | GLPI sign-in, staff UI, client helpdesk | Custom CSS on the root entity, inherited by every client entity, + `glpi/branding/` files | Done (WISE Group style) |
-| Grafana | `BRAND_NAME` → `GF_BRANDING_APP_TITLE`. Custom logo on login/menu needs Grafana Enterprise | Title only in OSS |
+| Zabbix web UI | `wisesphere/zabbix-web` image (`zabbix/web/Dockerfile`): blue theme recoloured (`theme.sed`), `wisesphere.css`, logos + footer (`brand.conf.php`), Cairo font, favicon | Done (WISE Group style) |
+| Grafana | `wisesphere/grafana` image (`grafana/Dockerfile`): WISE icon, favicon, dark sign-in background; light theme; dashboard logo header and brand colours. Buttons and menus keep Grafana's own colours (Grafana OSS has no theme setting) | Done (within OSS limits) |
 | SMS and ticket texts | Brand name in SMS and ticket texts from the integration service | Done ("WiseSphere …") |
 | Monthly client report (RPT-01) | Will read `tokens.json` + logo | When WBS 5.3 is built |
 | WiseSphere portal (Angular) | `web/portal/src/tokens.css` + `web/portal/public/brand/` | Done (WISE Group style) |
