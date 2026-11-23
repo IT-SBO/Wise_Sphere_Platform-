@@ -99,4 +99,5 @@ make lab-reset       # delete everything and start from zero next time
 | `/bin/bash^M: bad interpreter` | Files were checked out with Windows line endings. Run `git config core.autocrlf false`, then `git rm --cached -r . -q && git reset --hard` |
 | Containers stop or are very slow | Give Docker more memory (Settings → Resources), close other heavy programs |
 | `make lab-test` fails right after bootstrap | Wait one minute (GLPI and Zabbix finish starting) and run it again |
+| `make lab-bootstrap` stops with `Read timed out` (localhost:8090), or the portal says "Something went wrong" / "GLPI is not answering" | GLPI is slow on its first API call (Windows drive, little memory). Open http://localhost:8090 once and sign in (glpi/glpi) to warm it up, give Docker more memory, then run `make lab-bootstrap` again. Faster: clone the project into the Ubuntu home (`~/wisesphere`) instead of `/mnt/d` |
 | Portal says "Monitoring view is not configured" | Run `make lab-bootstrap` again (it creates the read-only Zabbix token) |

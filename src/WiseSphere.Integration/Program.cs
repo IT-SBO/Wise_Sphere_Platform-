@@ -26,7 +26,7 @@ builder.Services.AddSingleton(sp => PolicyLoader.Load(sp.GetRequiredService<IOpt
 // Long-lived singletons (GLPI session pool) with connection recycling so DNS changes are picked up
 static HttpClient NewHttp(int timeoutSeconds) =>
     new(new SocketsHttpHandler { PooledConnectionLifetime = TimeSpan.FromMinutes(5) }) { Timeout = TimeSpan.FromSeconds(timeoutSeconds) };
-builder.Services.AddSingleton(sp => ActivatorUtilities.CreateInstance<GlpiClient>(sp, NewHttp(30)));
+builder.Services.AddSingleton(sp => ActivatorUtilities.CreateInstance<GlpiClient>(sp, NewHttp(150)));
 builder.Services.AddSingleton(sp => ActivatorUtilities.CreateInstance<SmsSender>(sp, NewHttp(10)));
 builder.Services.AddSingleton<Metrics>();
 builder.Services.AddSingleton<KeyedLock>();

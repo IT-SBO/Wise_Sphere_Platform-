@@ -39,6 +39,11 @@ docker exec ws-glpi bin/console config:set timezone "$TZ" >/dev/null
 # Read-only DB user for Grafana (DSH-03/04)
 SQL -e "CREATE USER IF NOT EXISTS 'grafana_ro'@'%' IDENTIFIED BY '$GLPI_DB_RO_PASSWORD'; GRANT SELECT ON glpi.* TO 'grafana_ro'@'%'; FLUSH PRIVILEGES;"
 
+echo "== GLPI: warming up the API (first call builds GLPI's caches; can take minutes on slow disks)"
+T0=$(date +%s); curl -s -o /dev/null -m 900 "http://localhost:${GLPI_PORT}/apirest.php/" || true
+curl -s -o /dev/null -m 900 "http://localhost:${GLPI_PORT}/front/central.php" || true
+echo "   GLPI answered after $(( $(date +%s) - T0 )) s"
+
 echo "== GLPI: provisioning through the API (bootstrap client opened to the docker gateway only while it runs)"
 GW="$(docker network inspect wisesphere-lab_lab -f '{{(index .IPAM.Config 0).Gateway}}')"
 SQL glpi -e "UPDATE glpi_apiclients SET ipv4_range_start=INET_ATON('$GW'), ipv4_range_end=INET_ATON('$GW') WHERE id=1"

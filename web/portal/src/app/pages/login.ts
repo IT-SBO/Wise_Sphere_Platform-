@@ -40,7 +40,8 @@ export class LoginPage {
       await this.auth.login(this.username, this.password);
       await this.router.navigateByUrl('/dashboard');
     } catch (e) {
-      this.error.set(e instanceof HttpErrorResponse && e.status === 429 ? 'auth.locked' : e instanceof HttpErrorResponse && e.status === 401 ? 'auth.invalid' : 'common.error');
+      const st = e instanceof HttpErrorResponse ? e.status : 0;
+      this.error.set(st === 429 ? 'auth.locked' : st === 401 ? 'auth.invalid' : st === 503 || st === 504 ? 'auth.unavailable' : 'common.error');
     } finally {
       this.busy.set(false);
     }
