@@ -1,6 +1,7 @@
 # WiseSphere Platform – Project Reference
 
-One page with everything needed to install, run, test, brand and continue the WiseSphere platform.
+One page with everything needed to install, run, demo, test, brand and continue the WiseSphere platform.
+**Fastest way: section 0 – `./wisesphere start` and `./wisesphere demo`.**
 Keep it next to the code: `WiseSphere_Platform.md` in the repository root.
 
 | Item | Value |
@@ -13,6 +14,56 @@ Keep it next to the code: `WiseSphere_Platform.md` in the repository root.
 | Development document | `docs/WiseSphere_Development_Document.docx` (v1.2 – section 9 = design system) |
 | Design | WISE Group brand from wisegroup.trade – one file: `branding/tokens.json` – all steps in **section 9** |
 | Windows guide (detail) | `docs/RUN_ON_WINDOWS.md` |
+
+---
+
+## 0. Quick start – one command (run + demo)
+
+In Ubuntu (Windows: Docker Desktop running, then type `wsl` in PowerShell):
+```bash
+cd "/mnt/d/mnt/WiseSphere Platform"
+```
+```bash
+./wisesphere start
+```
+Everything is built, started, provisioned and branded; at the end it prints all addresses, logins and the portal password.
+First run about 10 minutes, then 1–2 minutes. Live demo for clients and management:
+```bash
+./wisesphere demo
+```
+
+| Command | What it does |
+|---|---|
+| `./wisesphere start` | Build + start all containers, set up GLPI and Zabbix, apply the design, print addresses and logins |
+| `./wisesphere start --quick` | Fast restart: skip the set-up when it was done before |
+| `./wisesphere start --no-build` | Use the images already built (offline / faster) |
+| `./wisesphere demo` | Full live demo (below) |
+| `./wisesphere demo down` / `up` | Device down -> ticket in seconds / device back -> ticket solved automatically |
+| `./wisesphere demo security` | Wazuh brute-force alerts -> SOC tickets, SMS for level 12, repeat de-duplicated |
+| `./wisesphere demo sla` | Ticket 10 min from breach -> “SLA AT RISK” SMS |
+| `./wisesphere demo storm` | 15 devices down at once -> ONE storm ticket + SMS |
+| `./wisesphere demo clear` | Devices back up, demo tickets solved (run after a demo) |
+| `./wisesphere urls` | Addresses, logins and passwords again |
+| `./wisesphere status` | Containers and health |
+| `./wisesphere stop` | Stop everything (data kept) |
+| `./wisesphere test` | Full end-to-end test (29 checks) |
+| `./wisesphere logs [integration\|portal\|glpi\|zabbix]` | Follow logs |
+| `./wisesphere update` | `git pull` + start |
+| `./wisesphere brand` | Apply `branding/tokens.json` to portal, GLPI, Zabbix, Grafana |
+| `./wisesphere reset` | Delete the lab and all its data (asks for YES) |
+| `./wisesphere install` | Add `wisesphere` to the PATH and a systemd service that starts the platform at boot (Linux with systemd; on WSL only the command) |
+
+The same with make: `make start`, `make demo`, `make stop`.
+
+**Demo script (about 10 minutes):**
+1. `./wisesphere start`, open the portal and sign in as `noc.operator` – dashboard, client health.
+2. `./wisesphere demo down` – show the new ticket in the portal and in GLPI (client queue, SLA, source Monitoring).
+3. `./wisesphere demo up` – the ticket is solved automatically.
+4. `./wisesphere demo security` – sign in as `soc.engineer`, open the `[WZH:` ticket, approve a firewall block; show http://localhost:8099/fw/blocks.
+5. `./wisesphere demo sla` and `./wisesphere demo storm` – show the SMS at http://localhost:8099/messages and the single STORM ticket.
+6. Sign in as `client.cl001` – the client sees only its own tickets; open **Reports** -> monthly report -> Print / Save as PDF; switch to **العربية**.
+7. Zabbix (problems, hosts) and Grafana (NOC wall) in the WISE Group design.
+8. `./wisesphere demo clear`.
 
 ---
 

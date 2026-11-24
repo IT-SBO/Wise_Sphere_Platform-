@@ -36,6 +36,9 @@ Release-1 platform: multi-client, deduplicated, storm-safe, SLA-aware, secured, 
 
 ## Try it: the lab (about 5 minutes)
 
+**One command:** `./wisesphere start` (everything up, set up and branded), then `./wisesphere demo` (live demo).
+`./wisesphere help` lists all commands. The steps below do the same by hand.
+
 > **On Windows?** Follow [docs/RUN_ON_WINDOWS.md](docs/RUN_ON_WINDOWS.md) (Docker Desktop + WSL 2).
 
 Needs Docker with Compose, Python 3.11+, ~6 GB RAM. The .NET SDK is optional (`scripts/dotnet.sh` runs it in a container).
