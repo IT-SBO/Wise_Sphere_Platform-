@@ -13,6 +13,7 @@ Keep it next to the code: `WiseSphere_Platform.md` in the repository root.
 | Requirements | WS-PRD-001 v2.0 (`docs/WiseSphere_PRD_and_Implementation_Plan.docx`) |
 | Development document | `docs/WiseSphere_Development_Document.docx` (v1.2 – section 9 = design system) |
 | Design | WISE Group brand from wisegroup.trade – one file: `branding/tokens.json` – all steps in **section 9** |
+| Presentation | `docs/WiseSphere_Presentation.pptx` (40 slides, all modules with screenshots) |
 | Windows guide (detail) | `docs/RUN_ON_WINDOWS.md` |
 
 ---

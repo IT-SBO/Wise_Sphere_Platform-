@@ -8,6 +8,8 @@ Release-1 platform: multi-client, deduplicated, storm-safe, SLA-aware, secured, 
 
 > **Start here:** [`WiseSphere_Platform.md`](WiseSphere_Platform.md) – the project reference with every installation and run step.
 >
+> **Presentation:** [`docs/WiseSphere_Presentation.pptx`](docs/WiseSphere_Presentation.pptx) – all modules, features and screens (40 slides).
+>
 > **Development document:** [`docs/WiseSphere_Development_Document.docx`](docs/WiseSphere_Development_Document.docx) – architecture, code, APIs, set-up, testing, security and the development guide.
 >
 > Design: the portal, GLPI, Zabbix and Grafana use the WISE Group design (wisegroup.trade). Everything visual lives in

@@ -102,8 +102,10 @@ def demo_down():
     sender(1, 0)
     time.sleep(2)
     first = max_ticket()
+    t0 = time.time()
     sender(1, 1)
-    t, secs = wait(lambda: device_ticket(1, after=first))
+    t, _ = wait(lambda: device_ticket(1, after=first))
+    secs = time.time() - t0
     if t:
         ok(f"Ticket #{t[0]} created in {secs:.1f} s, in the CL001 queue with SLA, NOC group, source 'Monitoring'")
         print(f"    {DIM}{t[2]}{END}\n    {DIM}{ticket_link(t[0])}{END}")
@@ -115,11 +117,13 @@ def demo_down():
 def demo_up():
     step("Device back up: 'Lab device 01' answers again (Zabbix recovery)")
     before = device_ticket(1)
+    t0 = time.time()
     sender(1, 0)
     if not before:
         ok("no open ticket for device 01 – nothing to solve (run `demo down` first)")
         return
-    t, secs = wait(lambda: (lambda r: r if r and r[0][0] in ("5", "6") else None)(sql(f"SELECT status FROM glpi_tickets WHERE id={before[0]}")))
+    t, _ = wait(lambda: (lambda r: r if r and r[0][0] in ("5", "6") else None)(sql(f"SELECT status FROM glpi_tickets WHERE id={before[0]}")))
+    secs = time.time() - t0
     ok(f"Ticket #{before[0]} solved automatically in {secs:.1f} s") if t else fail(f"ticket #{before[0]} not solved yet")
 
 
@@ -147,9 +151,11 @@ def demo_storm():
         sender(n, 0)
     time.sleep(2)
     first = max_ticket()
+    t0 = time.time()
     for n in range(1, 16):
         sender(n, 1)
-    s, secs = wait(lambda: sql(f"SELECT id FROM glpi_tickets WHERE name LIKE '[STORM:CL001]%' AND status < 5 AND id > {first} ORDER BY id DESC LIMIT 1"), timeout=180)
+    s, _ = wait(lambda: sql(f"SELECT id FROM glpi_tickets WHERE name LIKE '[STORM:CL001]%' AND status < 5 AND id > {first} ORDER BY id DESC LIMIT 1"), timeout=180)
+    secs = time.time() - t0
     if s:
         ok(f"ONE storm ticket #{s[0][0]} in {secs:.1f} s instead of 15 tickets; the other alerts are follow-ups on it")
         print(f"    {DIM}{ticket_link(s[0][0])}{END}")
