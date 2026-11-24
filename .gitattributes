@@ -17,3 +17,4 @@ Makefile  text eol=lf
 *.pdf binary
 *.docx binary
 *.ico binary
+wisesphere text eol=lf

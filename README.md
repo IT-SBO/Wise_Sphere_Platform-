@@ -8,6 +8,8 @@ Release-1 platform: multi-client, deduplicated, storm-safe, SLA-aware, secured, 
 
 > **Start here:** [`WiseSphere_Platform.md`](WiseSphere_Platform.md) – the project reference with every installation and run step.
 >
+> **Presentation:** [`docs/WiseSphere_Presentation.pptx`](docs/WiseSphere_Presentation.pptx) – all modules, features and screens (40 slides).
+>
 > **Development document:** [`docs/WiseSphere_Development_Document.docx`](docs/WiseSphere_Development_Document.docx) – architecture, code, APIs, set-up, testing, security and the development guide.
 >
 > Design: the portal, GLPI, Zabbix and Grafana use the WISE Group design (wisegroup.trade). Everything visual lives in
@@ -35,6 +37,9 @@ Release-1 platform: multi-client, deduplicated, storm-safe, SLA-aware, secured, 
 | `poc/` | The original PoC (compose, workflow, PDFs, screenshots) and [what the platform changes](poc/README.md) |
 
 ## Try it: the lab (about 5 minutes)
+
+**One command:** `./wisesphere start` (everything up, set up and branded), then `./wisesphere demo` (live demo).
+`./wisesphere help` lists all commands. The steps below do the same by hand.
 
 > **On Windows?** Follow [docs/RUN_ON_WINDOWS.md](docs/RUN_ON_WINDOWS.md) (Docker Desktop + WSL 2).
 

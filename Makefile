@@ -3,7 +3,16 @@ SHELL := /bin/bash
 PY ?= python3
 DOTNET ?= scripts/dotnet.sh
 
-.PHONY: web web-dev help build test unit check image lab-env lab-up lab-bootstrap lab-test lab-load-test lab-poc-test lab-logs lab-down lab-reset brand brand-glpi
+.PHONY: start demo stop web web-dev help build test unit check image lab-env lab-up lab-bootstrap lab-test lab-load-test lab-poc-test lab-logs lab-down lab-reset brand brand-glpi
+
+start: ## ONE command: build, start, provision and brand everything (= ./wisesphere start)
+	./wisesphere start
+
+demo: ## Live demo scenarios (= ./wisesphere demo)
+	./wisesphere demo
+
+stop: ## Stop everything, data kept (= ./wisesphere stop)
+	./wisesphere stop
 
 help:
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-15s %s\n", $$1, $$2}'
@@ -22,7 +31,7 @@ check: ## CI checks: unit tests, compose files valid, shell syntax
 	docker compose -f hub/docker-compose.yml --env-file hub/.env.example --profile app --profile zabbix config -q
 	docker compose -f lab/docker-compose.yml --env-file lab/.env.example config -q
 	docker compose -f spoke/docker-compose.yml --env-file spoke/.env.example --profile wazuh-relay config -q
-	bash -n spoke/install-spoke.sh ops/*.sh scripts/*.sh tests/*.sh
+	bash -n spoke/install-spoke.sh ops/*.sh scripts/*.sh tests/*.sh wisesphere
 
 image: ## Build the integration service and portal images (:dev)
 	DOCKER_BUILDKIT=1 docker build -f src/WiseSphere.Integration/Dockerfile -t wisesphere/integration:dev .

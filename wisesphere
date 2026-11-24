@@ -1,0 +1,205 @@
+#!/usr/bin/env bash
+# WiseSphere – one command to run, demo and manage the platform on Linux (also Ubuntu on Windows / WSL).
+#
+#   ./wisesphere start            everything up and ready (first run ~10 min, then ~1-2 min)
+#   ./wisesphere demo             live demo: device down -> ticket -> solved, security, storm, SLA SMS
+#
+# Run `./wisesphere help` for all commands.  Lab / demo use; production uses hub/ (see WiseSphere_Platform.md).
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
+cd "$ROOT"
+O=$'\033[38;5;166m'; G=$'\033[32m'; R=$'\033[31m'; B=$'\033[1m'; D=$'\033[2m'; E=$'\033[0m'
+say()  { printf '%s\n' "${O}${B}==>${E}${B} $*${E}"; }
+ok()   { printf '  %s %s\n' "${G}✔${E}" "$*"; }
+warn() { printf '  %s %s\n' "${R}!${E}" "$*"; }
+die()  { printf '%s\n' "${R}✘ $*${E}" >&2; exit 1; }
+compose() { (cd lab && docker compose --profile grafana "$@"); }
+env_get() { grep -E "^$1=" lab/.env 2>/dev/null | head -1 | cut -d= -f2- || true; }
+
+banner() {
+  printf '%s\n' "${O}${B}  W i S E   G R O U P${E}   ${B}Wise${O}Sphere${E}  ${D}managed network & security services${E}"
+}
+
+need() {
+  command -v docker >/dev/null || die "Docker is not installed. Install Docker Desktop (Windows) or Docker Engine (Linux)."
+  docker info >/dev/null 2>&1 || die "Docker is not running. Start Docker Desktop and wait for 'Engine running'."
+  docker compose version >/dev/null 2>&1 || die "Docker Compose v2 is missing."
+  command -v python3 >/dev/null || die "python3 is missing: sudo apt install -y python3 python3-venv python3-pip"
+}
+
+venv() {
+  if [ ! -x .venv/bin/python ]; then
+    say "Python tools (once)"
+    python3 -m venv .venv || die "python3-venv missing: sudo apt install -y python3-venv"
+  fi
+  # shellcheck disable=SC1091
+  source .venv/bin/activate
+  if [ ! -f .venv/.req-ok ] || [ requirements.txt -nt .venv/.req-ok ]; then
+    pip install -q -r requirements.txt && touch .venv/.req-ok
+  fi
+}
+
+wait_http() { # name url seconds
+  local t=0
+  until curl -s -o /dev/null -m 5 "$2"; do
+    t=$((t + 3)); [ "$t" -ge "$3" ] && { warn "$1 not answering yet ($2)"; return 1; }
+    sleep 3
+  done
+  ok "$1 is up"
+}
+
+urls() {
+  local pw gpw; pw="$(env_get LAB_USERS_PASSWORD)"; gpw="$(env_get GRAFANA_ADMIN_PASSWORD)"
+  cat <<EOF
+
+${B}Open in the browser${E} (press Ctrl+F5 the first time):
+  ${O}WiseSphere portal${E}  http://localhost:$(env_get PORTAL_PORT)   noc.operator | soc.engineer | client.cl001   password: ${B}${pw}${E}
+  ${O}GLPI${E}               http://localhost:$(env_get GLPI_PORT)   glpi / glpi
+  ${O}Zabbix${E}             http://localhost:$(env_get ZABBIX_PORT)   Admin / zabbix
+  ${O}Grafana${E}            http://localhost:$(env_get GRAFANA_PORT)   admin / ${gpw}
+  ${O}SMS + firewall${E}     http://localhost:$(env_get SMS_PORT)/messages   http://localhost:$(env_get SMS_PORT)/fw/blocks
+  ${O}Service health${E}     http://localhost:$(env_get INTEGRATION_PORT)/readyz   /metrics
+
+${D}Demo: ./wisesphere demo   ·   stop: ./wisesphere stop${E}
+EOF
+}
+
+cmd_start() {
+  local quick="" build="--build" a
+  for a in "$@"; do case "$a" in --quick) quick=1 ;; --no-build) build="" ;; esac; done
+  [ -n "${WS_NO_BUILD:-}" ] && build=""
+  banner; need
+  say "Configuration"; scripts/lab-env.sh >/dev/null; ok "lab/.env ready"
+  venv; ok "Python tools ready"
+  say "Building and starting the containers (first time ~10 min)"
+  # shellcheck disable=SC2086
+  compose up -d $build --remove-orphans
+  say "Waiting for the web applications"
+  wait_http "GLPI" "http://localhost:$(env_get GLPI_PORT)/" 600 || true
+  wait_http "Zabbix" "http://localhost:$(env_get ZABBIX_PORT)/" 300 || true
+  if [ -n "$quick" ] && [ -f lab/glpi-ids.json ]; then
+    ok "provisioning skipped (--quick)"
+  else
+    say "Provisioning GLPI + Zabbix, design, integration (safe to repeat)"
+    local n
+    for n in 1 2 3; do
+      if scripts/bootstrap_lab.sh; then break; fi
+      [ "$n" = 3 ] && die "provisioning failed 3 times – see the messages above, then run ./wisesphere start again"
+      warn "provisioning attempt $n failed, retrying in 20 s (GLPI is often slow the first time)"; sleep 20
+    done
+  fi
+  wait_http "Portal" "http://localhost:$(env_get PORTAL_PORT)/healthz" 120 || true
+  printf '\n%s\n' "${G}${B}WiseSphere is running.${E}"
+  urls
+}
+
+cmd_stop()    { need; say "Stopping (data kept)"; compose stop; ok "stopped – start again with ./wisesphere start --quick"; }
+cmd_status()  {
+  need; say "Containers"
+  docker ps -a --filter name=ws- --format '  {{.Names}}\t{{.Status}}' | sort
+  say "Health"
+  curl -s -m 5 "http://localhost:$(env_get INTEGRATION_PORT)/readyz" >/dev/null && ok "integration service ready" || warn "integration service not ready"
+  curl -s -m 5 "http://localhost:$(env_get PORTAL_PORT)/healthz" >/dev/null && ok "portal ready" || warn "portal not ready"
+  curl -s -m 5 -o /dev/null "http://localhost:$(env_get GLPI_PORT)/" && ok "GLPI ready" || warn "GLPI not ready"
+  curl -s -m 5 -o /dev/null "http://localhost:$(env_get ZABBIX_PORT)/" && ok "Zabbix ready" || warn "Zabbix not ready"
+}
+cmd_demo()    { need; venv; python3 scripts/demo.py "${1:-all}"; }
+cmd_test()    { need; venv; python3 tests/e2e_lab.py; }
+cmd_logs()    {
+  need
+  case "${1:-integration}" in
+    integration|service) docker logs -f --tail 100 ws-integration ;;
+    portal) docker logs -f --tail 100 ws-portal ;;
+    glpi) docker logs -f --tail 100 ws-glpi ;;
+    zabbix) docker logs -f --tail 100 ws-zabbix-server ;;
+    *) docker logs -f --tail 100 "ws-$1" ;;
+  esac
+}
+cmd_update()  { say "Getting the latest version"; git pull --ff-only origin main; cmd_start; }
+cmd_brand()   { need; venv; say "Applying branding/tokens.json everywhere"; python3 branding/apply_branding.py --render
+                compose up -d --build ws-portal zabbix-web grafana; make -s brand-glpi; ok "design applied – press Ctrl+F5 in the browser"; }
+cmd_reset()   {
+  need; read -r -p "Delete the lab and ALL its data (tickets, monitoring history)? Type YES: " a
+  [ "$a" = "YES" ] || die "cancelled"
+  compose down -v --remove-orphans; rm -f lab/glpi-ids.json; ok "lab deleted – ./wisesphere start builds it again"
+}
+
+cmd_install() {
+  # optional: `wisesphere` on the PATH + a systemd service that starts the platform at boot
+  local bin=/usr/local/bin/wisesphere unit=/etc/systemd/system/wisesphere.service user; user="$(id -un)"
+  say "Installing the 'wisesphere' command"; sudo ln -sf "$ROOT/wisesphere" "$bin"; ok "$bin -> $ROOT/wisesphere"
+  if [ -d /run/systemd/system ]; then
+    say "Installing the systemd service (start at boot)"
+    sudo tee "$unit" >/dev/null <<EOF
+[Unit]
+Description=WiseSphere platform (lab / demo)
+Requires=docker.service
+After=docker.service network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+User=$user
+WorkingDirectory=$ROOT
+ExecStart=$ROOT/wisesphere start --quick
+ExecStop=$ROOT/wisesphere stop
+TimeoutStartSec=1800
+
+[Install]
+WantedBy=multi-user.target
+EOF
+    sudo systemctl daemon-reload && sudo systemctl enable wisesphere.service >/dev/null
+    ok "service installed: sudo systemctl start|stop|status wisesphere"
+  else
+    warn "systemd is not running here (normal on WSL without systemd) – use 'wisesphere start' instead"
+  fi
+  ok "now you can type: wisesphere start   ·   wisesphere demo"
+}
+
+cmd_uninstall() {
+  [ -f /etc/systemd/system/wisesphere.service ] && { sudo systemctl disable --now wisesphere.service || true; sudo rm -f /etc/systemd/system/wisesphere.service; sudo systemctl daemon-reload; }
+  sudo rm -f /usr/local/bin/wisesphere; ok "command and service removed (lab data kept)"
+}
+
+usage() {
+  banner
+  cat <<EOF
+
+${B}Usage:${E} ./wisesphere <command>
+
+  ${O}start${E} [--quick] [--no-build]
+                     build, start, provision and brand everything; prints addresses and logins
+                     --quick     skip provisioning when it was done before (fast restart)
+                     --no-build  use the images already built (offline / faster)
+  ${O}demo${E} [scenario]   live demo; scenarios: all (default), down, up, security, storm, sla, clear
+  ${O}urls${E}              addresses and logins
+  ${O}status${E}            containers and health
+  ${O}stop${E}              stop everything (data kept)
+  ${O}test${E}              full end-to-end test (29 checks)
+  ${O}logs${E} [name]       follow logs: integration (default), portal, glpi, zabbix
+  ${O}update${E}            git pull + start
+  ${O}brand${E}             apply branding/tokens.json to portal, GLPI, Zabbix, Grafana
+  ${O}reset${E}             delete the lab and all its data
+  ${O}install${E}           add 'wisesphere' to the PATH and a systemd service (start at boot)
+  ${O}uninstall${E}         remove the command and the service
+EOF
+}
+
+case "${1:-help}" in
+  start) shift; cmd_start "$@" ;;
+  stop) cmd_stop ;;
+  restart) cmd_stop; cmd_start --quick ;;
+  status) cmd_status ;;
+  demo) shift; cmd_demo "$@" ;;
+  urls|open|info) urls ;;
+  test) cmd_test ;;
+  logs) shift; cmd_logs "$@" ;;
+  update) cmd_update ;;
+  brand) cmd_brand ;;
+  reset) cmd_reset ;;
+  install) cmd_install ;;
+  uninstall) cmd_uninstall ;;
+  help|-h|--help) usage ;;
+  *) usage; exit 2 ;;
+esac
